@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}فحص السرعة{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>فحص سرعة الشبكة</h1>
+  <p class="muted">قياس حقيقي عبر خادم Render — بدون نتائج وهمية.</p>
+  {% if not available %}
+    <div class="alert">اختبار الإنترنت غير متاح حاليًا على الخادم.</div>
+  {% else %}
+    <button id="run" class="primary">بدء الفحص</button>
+    <div id="status" class="muted">جاهز</div>
+    <div class="metrics" hidden id="metrics">
+      <div><span id="dl">—</span><small>تحميل Mbps</small></div>
+      <div><span id="ul">—</span><small>رفع Mbps</small></div>
+      <div><span id="pg">—</span><small>بنق ms</small></div>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+{% if available %}
+<script>
+const TOKEN = {{ token|tojson }};
+const MIB = 1024 * 1024;
+async function api(path, opts = {}) {
+  const headers = Object.assign({'Authorization': 'Bearer ' + TOKEN}, opts.headers || {});
+  const res = await fetch(path, Object.assign({}, opts, {headers}));
+  if (!res.ok) {
+    let detail = 'فشل الطلب';
+    try { detail = (await res.json()).detail || detail; } catch (_) {}
+    throw new Error(detail);
+  }
+  if (res.status === 204) return null;
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return res.json();
+  return res.arrayBuffer();
+}
+document.getElementById('run').onclick = async () => {
+  const btn = document.getElementById('run');
+  const status = document.getElementById('status');
+  const metrics = document.getElementById('metrics');
+  btn.disabled = true; status.textContent = 'بدء الجلسة…';
+  try {
+    const session = await api('/api/speed/sessions', {method: 'POST'});
+    const sid = session.session_id;
+    const h = {'X-Test-Session': sid, 'Cache-Control': 'no-store'};
+    status.textContent = 'قياس البنق…';
+    const pings = [];
+    for (let i = 0; i < 7; i++) {
+      const t0 = performance.now();
+      await api('/api/speed/ping', {headers: h});
+      pings.push(performance.now() - t0);
+    }
+    const ping = pings.slice(1).reduce((a,b)=>a+b,0) / (pings.length - 1);
+    let downBytes = 0, upBytes = 0;
+    status.textContent = 'تحميل…';
+    const d0 = performance.now();
+    for (let i = 0; i < 2; i++) {
+      const buf = await api('/api/speed/download?size=' + (2*MIB), {headers: h});
+      downBytes += buf.byteLength;
+    }
+    const dSec = (performance.now() - d0) / 1000;
+    status.textContent = 'رفع…';
+    const payload = new Uint8Array(2 * MIB);
+    crypto.getRandomValues(payload);
+    const u0 = performance.now();
+    for (let i = 0; i < 2; i++) {
+      const r = await api('/api/speed/upload', {
+        method: 'POST', headers: Object.assign({'Content-Type': 'application/octet-stream'}, h),
+        body: payload
+      });
+      upBytes += r.received_bytes;
+    }
+    const uSec = (performance.now() - u0) / 1000;
+    const download = downBytes * 8 / dSec / 1e6;
+    const upload = upBytes * 8 / uSec / 1e6;
+    await api('/api/network-tests', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        session_id: sid,
+        download_mbps: download,
+        upload_mbps: upload,
+        ping_ms: ping,
+        download_seconds: dSec,
+        upload_seconds: uSec,
+        download_bytes: downBytes,
+        upload_bytes: upBytes,
+        connection_type: 'unknown',
+        connection_source: 'unavailable',
+        share_location: false,
+        measurement_time: Date.now() / 1000,
+        test_status: 'completed'
+      })
+    });
+    metrics.hidden = false;
+    document.getElementById('dl').textContent = download.toFixed(1);
+    document.getElementById('ul').textContent = upload.toFixed(1);
+    document.getElementById('pg').textContent = ping.toFixed(0);
+    status.textContent = 'تم الحفظ على الخادم';
+  } catch (e) {
+    status.textContent = e.message || String(e);
+  } finally {
+    btn.disabled = false;
+  }
+};
+</script>
+{% endif %}
+{% endblock %}

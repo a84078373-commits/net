@@ -866,26 +866,42 @@ class AdminScreen extends StatefulWidget {
   State<AdminScreen> createState() => _AdminScreenState();
 }
 
-class _AdminScreenState extends State<AdminScreen> {
+class _AdminScreenState extends State<AdminScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController tabs;
   Map<String, dynamic>? overview;
   List<Map<String, dynamic>> users = [], measurements = [];
   final gemini = TextEditingController();
   final analyze = TextEditingController();
+  final userQuery = TextEditingController();
   String? geminiMasked, analysis, error;
   bool loading = true, savingKey = false, analyzing = false;
 
   @override
   void initState() {
     super.initState();
+    tabs = TabController(length: 4, vsync: this);
+    networkApi.addListener(_onAuth);
     reload();
+  }
+
+  void _onAuth() {
+    if (mounted) setState(() {});
+    if (networkApi.isAdmin) reload();
   }
 
   @override
   void dispose() {
+    networkApi.removeListener(_onAuth);
+    tabs.dispose();
     gemini.dispose();
     analyze.dispose();
+    userQuery.dispose();
     super.dispose();
   }
+
+  String _n(num? v, [int digits = 1]) =>
+      v == null ? '—' : v.toStringAsFixed(digits);
 
   Future<void> reload() async {
     if (networkApi.token == null || !networkApi.isAdmin) {
@@ -902,13 +918,22 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       final o = await networkApi.request('/api/admin/overview');
       final u = await networkApi.request('/api/admin/users');
-      final m = await networkApi.request('/api/admin/measurements');
+      final m = await networkApi.request(
+        '/api/admin/measurements',
+        query: {'limit': '100'},
+      );
       final s = await networkApi.request('/api/admin/settings');
       if (!mounted) return;
       setState(() {
         overview = o;
-        users = (u['items'] as List).cast<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
-        measurements = (m['items'] as List).cast<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        users = (u['items'] as List)
+            .cast<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        measurements = (m['items'] as List)
+            .cast<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
         geminiMasked = s['gemini_api_key_masked'] as String?;
         loading = false;
       });
@@ -961,41 +986,335 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  Future<void> deleteUser(Map<String, dynamic> u) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف المستخدم؟'),
+        content: Text('سيتم حذف ${u['phone']} وكل قياساته نهائيًا.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await networkApi.request('/api/admin/users/${u['id']}', method: 'DELETE');
+      await reload();
+      if (mounted) toast(context, 'تم حذف المستخدم');
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
+  }
+
+  Future<void> deleteMeasurement(Map<String, dynamic> m) async {
+    try {
+      await networkApi.request(
+        '/api/admin/measurements/${m['id']}',
+        method: 'DELETE',
+      );
+      await reload();
+      if (mounted) toast(context, 'تم حذف القياس');
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
+  }
+
+  List<Map<String, dynamic>> get filteredUsers {
+    final q = userQuery.text.trim();
+    if (q.isEmpty) return users;
+    return users
+        .where(
+          (u) =>
+              '${u['phone']}'.contains(q) ||
+              '${u['name']}'.contains(q),
+        )
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!networkApi.isAdmin) {
       return CarePage(
-        title: 'لوحة الإدارة',
+        title: 'لوحة تحكم المدير',
+        eyebrow: 'ADMIN CONTROL',
         children: [
           emptyState(
-            Icons.lock_outline,
-            'للإدارة فقط',
-            'ادخل بحساب المدير: 0552515874',
+            Icons.admin_panel_settings_outlined,
+            'دخول المدير مطلوب',
+            'سجّل الدخول برقم 0552515874 وكلمة المرور الخاصة بالمدير لفتح اللوحة الكاملة.',
           ),
           actionButton(
-            'تسجيل الدخول',
-            () => openCare(context, const AuthScreen()),
+            'تسجيل دخول المدير',
+            () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: AuthScreen(),
+                  ),
+                ),
+              );
+              if (mounted) reload();
+            },
             icon: Icons.login,
           ),
         ],
       );
     }
-    return CarePage(
-      title: 'لوحة الإدارة',
-      eyebrow: 'SERVER ADMIN',
-      actions: [
-        IconButton(onPressed: loading ? null : reload, icon: const Icon(Icons.refresh)),
-      ],
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F7),
+      appBar: AppBar(
+        title: const Text('لوحة تحكم المدير'),
+        actions: [
+          IconButton(
+            onPressed: loading ? null : reload,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'تحديث',
+          ),
+        ],
+        bottom: TabBar(
+          controller: tabs,
+          isScrollable: true,
+          tabs: const [
+            Tab(text: 'نظرة عامة', icon: Icon(Icons.dashboard_outlined, size: 18)),
+            Tab(text: 'المستخدمون', icon: Icon(Icons.people_outline, size: 18)),
+            Tab(text: 'القياسات', icon: Icon(Icons.speed, size: 18)),
+            Tab(text: 'الذكاء والضبط', icon: Icon(Icons.tune, size: 18)),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          if (loading) const LinearProgressIndicator(minHeight: 2),
+          if (error != null)
+            Material(
+              color: const Color(0xFFFFF3E0),
+              child: ListTile(
+                leading: const Icon(Icons.warning_amber, color: Colors.orange),
+                title: Text(error!, style: const TextStyle(fontSize: 13)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() => error = null),
+                ),
+              ),
+            ),
+          Expanded(
+            child: TabBarView(
+              controller: tabs,
+              children: [
+                _overviewTab(),
+                _usersTab(),
+                _measurementsTab(),
+                _settingsTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _overviewTab() {
+    final o = overview;
+    if (o == null && loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final byConn = ((o?['by_connection'] as List?) ?? const [])
+        .cast<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    final top = ((o?['top_users'] as List?) ?? const [])
+        .cast<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    return ListView(
+      padding: const EdgeInsets.all(16),
       children: [
-        if (loading) const LinearProgressIndicator(),
-        if (error != null)
-          CareCard(Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
-        if (overview != null)
-          adaptiveMetrics([
-            metric('${overview!['users']}', 'المستخدمون', Icons.people_outline),
-            metric('${overview!['measurements']}', 'القياسات', Icons.speed),
-            metric('${overview!['shared_measurements']}', 'على الخريطة', Icons.map_outlined),
-          ]),
+        CareCard(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleText('مرحبًا، ${networkApi.user?['name'] ?? 'المدير'}'),
+              const SizedBox(height: 6),
+              muted(
+                '${networkApi.user?['phone'] ?? ''} • صلاحيات كاملة على الخادم',
+              ),
+            ],
+          ),
+        ),
+        adaptiveMetrics([
+          metric('${o?['users'] ?? 0}', 'المستخدمون', Icons.people_outline),
+          metric('${o?['admins'] ?? 0}', 'المدراء', Icons.verified_user_outlined),
+          metric('${o?['measurements'] ?? 0}', 'القياسات', Icons.speed),
+          metric(
+            '${o?['shared_measurements'] ?? 0}',
+            'على الخريطة',
+            Icons.map_outlined,
+          ),
+        ]),
+        adaptiveMetrics([
+          metric(
+            _n((o?['avg_download_mbps'] as num?)),
+            'متوسط التحميل Mbps',
+            Icons.download_outlined,
+          ),
+          metric(
+            _n((o?['avg_upload_mbps'] as num?)),
+            'متوسط الرفع Mbps',
+            Icons.upload_outlined,
+          ),
+          metric(
+            _n((o?['avg_ping_ms'] as num?), 0),
+            'متوسط البنق ms',
+            Icons.timer_outlined,
+          ),
+        ]),
+        CareCard(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              titleText('حالة الخادم'),
+              const SizedBox(height: 10),
+              muted('Origin: ${o?['public_origin'] == null || '${o?['public_origin']}'.isEmpty ? networkApi.baseUrl : o?['public_origin']}'),
+              muted('Speed API: ${o?['speed_enabled'] == true ? 'مفعّل' : 'متوقف'}'),
+              muted('Gemini: ${o?['gemini_configured'] == true ? 'مضبوط' : 'غير مضبوط'}'),
+              muted('قاعدة البيانات: ${o?['db_path'] ?? '—'}'),
+            ],
+          ),
+        ),
+        if (byConn.isNotEmpty) ...[
+          titleText('حسب نوع الاتصال'),
+          const SizedBox(height: 12),
+          for (final c in byConn)
+            CareCard(
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.wifi_tethering, color: _purple),
+                title: Text('${c['type'] ?? 'غير معروف'}'),
+                subtitle: muted(
+                  '${c['count']} قياس • متوسط ↓ ${_n(c['avg_download'] as num?)} • بنق ${_n(c['avg_ping'] as num?, 0)}',
+                ),
+              ),
+            ),
+        ],
+        if (top.isNotEmpty) ...[
+          titleText('أكثر المستخدمين نشاطًا'),
+          const SizedBox(height: 12),
+          for (final u in top)
+            CareCard(
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('${u['name'] ?? ''}'),
+                subtitle: muted('${u['phone']}'),
+                trailing: Text(
+                  '${u['tests']}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: _purple,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: actionButton('المستخدمون', () => tabs.animateTo(1), icon: Icons.people),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: actionButton('القياسات', () => tabs.animateTo(2), icon: Icons.speed),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _usersTab() {
+    final list = filteredUsers;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        TextField(
+          controller: userQuery,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search),
+            hintText: 'بحث بالاسم أو الرقم…',
+          ),
+        ),
+        const SizedBox(height: 12),
+        muted('${list.length} من ${users.length} مستخدم'),
+        const SizedBox(height: 12),
+        for (final u in list)
+          CareCard(
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundColor: u['is_admin'] == true
+                    ? StcColors.purple
+                    : StcColors.purpleSoft,
+                child: Icon(
+                  u['is_admin'] == true ? Icons.shield : Icons.person_outline,
+                  color: u['is_admin'] == true ? Colors.white : _purple,
+                ),
+              ),
+              title: Text(u['name']?.toString() ?? ''),
+              subtitle: muted(
+                '${u['phone']} • ${u['tests']} قياس${u['is_admin'] == true ? ' • مدير النظام' : ''}',
+              ),
+              trailing: u['is_admin'] == true
+                  ? const Icon(Icons.verified, color: _purple)
+                  : IconButton(
+                      tooltip: 'حذف المستخدم',
+                      onPressed: () => deleteUser(u),
+                      icon: const Icon(Icons.delete_outline, color: Colors.orangeAccent),
+                    ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _measurementsTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        muted('آخر ${measurements.length} قياس على الخادم'),
+        const SizedBox(height: 12),
+        if (measurements.isEmpty)
+          emptyState(Icons.speed, 'لا قياسات بعد', 'ستظهر هنا فور حفظ أول فحص سرعة.'),
+        for (final m in measurements)
+          CareCard(
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(m['phone']?.toString() ?? ''),
+              subtitle: muted(
+                '↓ ${_n(m['download_mbps'] as num?)} • ↑ ${_n(m['upload_mbps'] as num?)} • ${_n(m['ping_ms'] as num?, 0)} ms\n'
+                '${m['connection_type'] ?? '-'} • ${m['test_status'] ?? '-'}'
+                '${m['cell_y'] != null ? ' • خلية ${m['cell_y']},${m['cell_x']}' : ''}',
+              ),
+              isThreeLine: true,
+              trailing: IconButton(
+                tooltip: 'حذف القياس',
+                onPressed: () => deleteMeasurement(m),
+                icon: const Icon(Icons.delete_outline, color: Colors.orangeAccent),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _settingsTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
         CareCard(
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1004,7 +1323,7 @@ class _AdminScreenState extends State<AdminScreen> {
               const SizedBox(height: 8),
               muted(
                 geminiMasked == null || geminiMasked!.isEmpty
-                    ? 'لا يوجد مفتاح محفوظ'
+                    ? 'لا يوجد مفتاح محفوظ — أضفه لتفعيل التحليل الذكي'
                     : 'المفتاح الحالي: $geminiMasked',
               ),
               const SizedBox(height: 12),
@@ -1029,13 +1348,13 @@ class _AdminScreenState extends State<AdminScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              titleText('تحليل بـ Gemini'),
+              titleText('تحليل شبكة بـ Gemini'),
               const SizedBox(height: 12),
               TextField(
                 controller: analyze,
-                maxLines: 4,
+                maxLines: 5,
                 decoration: const InputDecoration(
-                  hintText: 'اكتب وصف مشكلة شبكة أو ملخص قياسات…',
+                  hintText: 'اكتب وصف مشكلة شبكة أو ألصق ملخص قياسات…',
                 ),
               ),
               const SizedBox(height: 12),
@@ -1051,51 +1370,18 @@ class _AdminScreenState extends State<AdminScreen> {
             ],
           ),
         ),
-        titleText('المستخدمون'),
-        const SizedBox(height: 12),
-        for (final u in users)
-          CareCard(
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(u['name']?.toString() ?? ''),
-              subtitle: muted(
-                '${u['phone']} • ${u['tests']} قياس${u['is_admin'] == true ? ' • مدير' : ''}',
-              ),
-              trailing: u['is_admin'] == true
-                  ? const Icon(Icons.verified, color: _purple)
-                  : IconButton(
-                      tooltip: 'حذف',
-                      onPressed: () async {
-                        try {
-                          await networkApi.request(
-                            '/api/admin/users/${u['id']}',
-                            method: 'DELETE',
-                          );
-                          await reload();
-                        } catch (e) {
-                          if (mounted) setState(() => error = e.toString());
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline, color: Colors.orangeAccent),
-                    ),
-            ),
+        CareCard(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleText('بيانات الدخول'),
+              const SizedBox(height: 8),
+              muted('رقم المدير: 0552515874'),
+              muted('API: ${networkApi.baseUrl}'),
+              muted('الحساب الحالي يملك صلاحية حذف المستخدمين والقياسات وضبط Gemini.'),
+            ],
           ),
-        titleText('آخر القياسات'),
-        const SizedBox(height: 12),
-        if (measurements.isEmpty) muted('لا توجد قياسات محفوظة بعد.'),
-        for (final m in measurements.take(30))
-          CareCard(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(m['phone']?.toString() ?? ''),
-                const SizedBox(height: 6),
-                muted(
-                  '↓ ${(m['download_mbps'] as num?)?.toStringAsFixed(1) ?? '-'} • ↑ ${(m['upload_mbps'] as num?)?.toStringAsFixed(1) ?? '-'} • ${(m['ping_ms'] as num?)?.toStringAsFixed(0) ?? '-'} ms • ${m['connection_type']}',
-                ),
-              ],
-            ),
-          ),
+        ),
       ],
     );
   }

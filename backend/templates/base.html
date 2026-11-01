@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SmartCare حائل{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('home') }}">stc <span>SmartCare</span></a>
+    <nav>
+      <a href="{{ url_for('home') }}">الرئيسية</a>
+      <a href="{{ url_for('web_speed') }}">فحص السرعة</a>
+      <a href="{{ url_for('web_map') }}">الخريطة</a>
+      {% if is_admin %}<a href="{{ url_for('web_admin') }}">لوحة المدير</a>{% endif %}
+      {% if current_user %}
+        <form class="inline" method="post" action="{{ url_for('web_logout') }}">
+          <button type="submit" class="linkish">خروج</button>
+        </form>
+      {% else %}
+        <a class="cta" href="{{ url_for('web_login') }}">دخول</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="foot">SmartCare حائل • قياس فعلي عبر الخادم • ليس تطبيق stc الرسمي</footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

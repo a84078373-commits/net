@@ -23,3 +23,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/brand/stc_profile.png
+    - assets/brand/product_sim.jpg
+    - assets/brand/product_transfer.jpg

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}تسجيل الدخول{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>تسجيل الدخول</h1>
+  <p class="muted">المدير: 0552515874 • كلمة المرور من إعدادات الخادم</p>
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  <form method="post" class="stack">
+    <label>الاسم (للتسجيل فقط)
+      <input name="name" maxlength="80" placeholder="اختياري عند الدخول">
+    </label>
+    <label>رقم الجوال
+      <input name="phone" required pattern="05[0-9]{8}" placeholder="05xxxxxxxx">
+    </label>
+    <label>كلمة المرور
+      <input name="password" type="password" required minlength="6" maxlength="128">
+    </label>
+    <div class="row">
+      <button name="mode" value="login" type="submit">دخول</button>
+      <button name="mode" value="register" type="submit" class="ghost">إنشاء حساب</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

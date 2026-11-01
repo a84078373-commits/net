@@ -17,4 +17,4 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 COPY backend /app/backend
 
 EXPOSE 10000
-CMD ["sh", "-c", "uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1 --no-access-log"]
+CMD ["sh", "-c", "gunicorn -b 0.0.0.0:${PORT:-10000} -w 1 --threads 8 --timeout 120 backend.flask_app:app"]

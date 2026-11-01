@@ -17,3 +17,5 @@ services:
         value: "0552515874"
       - key: SMARTCARE_ADMIN_PASSWORD
         value: "123456"
+      - key: SMARTCARE_SECRET
+        generateValue: true

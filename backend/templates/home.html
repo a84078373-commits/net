@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}مرحبا بكم في stc • SmartCare{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>مرحبا بكم في stc</h1>
+  <p>قياس سرعة الشبكة وخريطة جودة التغطية لحائل — نفس الخدمة التي يستخدمها التطبيق.</p>
+  <form class="search" action="{{ url_for('web_speed') }}" method="get">
+    <input type="search" placeholder="ما الذي تبحث عنه؟" readonly>
+    <button type="submit" aria-label="بحث">🔍</button>
+  </form>
+</section>
+
+<section>
+  <h2 class="section-title">استكشف منتجاتنا</h2>
+  <div class="cards-2">
+    <article class="shot dark">
+      <h3>حول رقمك إلى stc</h3>
+    </article>
+    <article class="shot purple">
+      <h3>شريحة جوال وإنترنت</h3>
+    </article>
+  </div>
+</section>
+
+<section>
+  <h2 class="section-title">انضم إلى stc</h2>
+  <a class="join" href="{{ url_for('web_speed') }}">الإنترنت المنزلي / ابدأ فحص السرعة</a>
+</section>
+
+<section>
+  <h2 class="section-title">إجراءات سريعة</h2>
+  <div class="actions">
+    <a href="{{ url_for('web_speed') }}"><strong>فحص السرعة</strong><span>قياس فعلي</span></a>
+    <a href="{{ url_for('web_map') }}"><strong>خريطة الجودة</strong><span>خلايا حائل</span></a>
+    <a href="{{ url_for('web_login') }}"><strong>الحساب</strong><span>دخول / تسجيل</span></a>
+    {% if is_admin %}
+    <a href="{{ url_for('web_admin') }}"><strong>لوحة المدير</strong><span>تحكم كامل</span></a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
