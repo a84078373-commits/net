@@ -977,13 +977,32 @@ def create_app(settings: Settings | None = None) -> Flask:
         masked = (key[:4] + '…' + key[-4:]) if len(key) > 10 else ('مضبوط' if key else '')
         return jsonify({'gemini_api_key_set': bool(key), 'gemini_api_key_masked': masked})
 
+    def _json_body():
+        data = request.get_json(silent=True, force=True)
+        if data is None:
+            raw = request.get_data(cache=True, as_text=True) or ''
+            if not raw.strip():
+                return {}
+            try:
+                import json as _json
+
+                parsed = _json.loads(raw)
+            except Exception:
+                raise _ApiError(422, 'تعذر قراءة JSON في الطلب')
+            if not isinstance(parsed, dict):
+                raise _ApiError(422, 'تعذر قراءة JSON في الطلب')
+            return parsed
+        if not isinstance(data, dict):
+            raise _ApiError(422, 'تعذر قراءة JSON في الطلب')
+        return data
+
     @app.put('/api/admin/settings')
     def admin_settings_put():
         require_admin(current_user())
-        body = request.get_json(silent=True) or {}
+        body = _json_body()
         key = body.get('gemini_api_key', '')
-        if not isinstance(key, str) or len(key) > 200:
-            raise _ApiError(422, 'حقول غير صالحة؛ تحقق من القياسات والإحداثيات والقيم المطلوبة')
+        if not isinstance(key, str) or len(key) > 512:
+            raise _ApiError(422, 'مفتاح Gemini غير صالح أو أطول من المسموح')
         key = key.strip()
         with database.connect() as db:
             if key:
@@ -998,16 +1017,21 @@ def create_app(settings: Settings | None = None) -> Flask:
     @app.post('/api/admin/analyze')
     def admin_analyze():
         require_admin(current_user())
-        body = request.get_json(silent=True) or {}
+        body = _json_body()
         text = body.get('text', '')
-        if not isinstance(text, str) or not (3 <= len(text) <= 4000):
-            raise _ApiError(422, 'حقول غير صالحة؛ تحقق من القياسات والإحداثيات والقيم المطلوبة')
+        if not isinstance(text, str):
+            raise _ApiError(422, 'نص التحليل يجب أن يكون نصًا')
+        text = text.strip()
+        if len(text) < 3:
+            raise _ApiError(422, 'اكتب وصفًا للتحليل (3 أحرف على الأقل)')
+        if len(text) > 4000:
+            raise _ApiError(422, 'نص التحليل طويل جدًا (الحد 4000 حرف)')
         with database.connect() as db:
             row = db.execute(
                 "SELECT value FROM app_settings WHERE key='gemini_api_key'"
             ).fetchone()
         if not row or not row['value']:
-            raise _ApiError(400, 'أدخل مفتاح Gemini من إعدادات الإدارة أولًا')
+            raise _ApiError(400, 'احفظ مفتاح Gemini أولًا من تبويب الذكاء والضبط')
         payload = {
             'contents': [
                 {
@@ -1020,15 +1044,40 @@ def create_app(settings: Settings | None = None) -> Flask:
                 }
             ]
         }
-        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+        # Try current flash model, then a stable fallback.
+        models = (
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-lite',
+            'gemini-1.5-flash',
+        )
+        last_status = None
+        last_body = None
         try:
-            response = httpx.post(url, params={'key': row['value']}, json=payload, timeout=45)
+            for model in models:
+                url = (
+                    f'https://generativelanguage.googleapis.com/v1beta/models/'
+                    f'{model}:generateContent'
+                )
+                response = httpx.post(
+                    url, params={'key': row['value']}, json=payload, timeout=45
+                )
+                last_status = response.status_code
+                last_body = response
+                if response.status_code < 400:
+                    break
+            else:
+                detail = 'رفض Gemini المفتاح أو الطلب؛ تحقق من المفتاح'
+                try:
+                    err = last_body.json().get('error', {}).get('message')
+                    if err:
+                        detail = f'رفض Gemini: {err}'
+                except Exception:
+                    pass
+                raise _ApiError(502, detail)
         except httpx.HTTPError:
             raise _ApiError(502, 'تعذر الاتصال بخدمة Gemini')
-        if response.status_code >= 400:
-            raise _ApiError(502, 'رفض Gemini المفتاح أو الطلب؛ تحقق من المفتاح')
         try:
-            analysis = response.json()['candidates'][0]['content']['parts'][0]['text']
+            analysis = last_body.json()['candidates'][0]['content']['parts'][0]['text']
         except (KeyError, IndexError, TypeError):
             raise _ApiError(502, 'استجابة Gemini غير صالحة')
         return jsonify({'analysis': analysis})
