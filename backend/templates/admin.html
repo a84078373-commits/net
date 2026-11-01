@@ -93,6 +93,8 @@ async function reload() {
         <p class="muted">متوسط ↓ ${(o.avg_download_mbps??0).toFixed?.(1) ?? '—'} • ↑ ${(o.avg_upload_mbps??0).toFixed?.(1) ?? '—'} • بنق ${(o.avg_ping_ms??0).toFixed?.(0) ?? '—'}</p>
         <p class="muted">Gemini: ${o.gemini_configured?'مضبوط':'غير مضبوط'} • Speed: ${o.speed_enabled?'مفعّل':'متوقف'}</p>
         <p class="muted">Origin: ${o.public_origin||'—'}</p>
+        <p class="muted">قاعدة البيانات: ${o.db_path||'—'} • ${o.db_persistent?'تخزين دائم ✓':'تخزين مؤقت ✗'}</p>
+        ${o.persistence_hint?`<div class="alert" role="alert">${o.persistence_hint}</div>`:''}
       </div>`;
     document.getElementById('users').innerHTML = `<p class="muted">${u.count ?? (u.items||[]).length} حساب محفوظ في قاعدة البيانات • الجلسة حتى تسجيل الخروج</p>` + ((u.items||[]).map(x => {
       const created = x.created_at_iso ? new Date(x.created_at_iso).toLocaleString('ar-SA') : '—';

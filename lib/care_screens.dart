@@ -1181,7 +1181,14 @@ class _AdminScreenState extends State<AdminScreen>
               muted('Origin: ${o?['public_origin'] == null || '${o?['public_origin']}'.isEmpty ? networkApi.baseUrl : o?['public_origin']}'),
               muted('Speed API: ${o?['speed_enabled'] == true ? 'مفعّل' : 'متوقف'}'),
               muted('Gemini: ${o?['gemini_configured'] == true ? 'مضبوط' : 'غير مضبوط'}'),
-              muted('قاعدة البيانات: ${o?['db_path'] ?? '—'}'),
+              muted(
+                'قاعدة البيانات: ${o?['db_path'] ?? '—'} • ${o?['db_persistent'] == true ? 'دائم' : 'مؤقت'}',
+              ),
+              if (o?['persistence_hint'] != null)
+                Text(
+                  '${o!['persistence_hint']}',
+                  style: const TextStyle(color: Colors.orangeAccent, height: 1.5),
+                ),
             ],
           ),
         ),

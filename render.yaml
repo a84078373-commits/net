@@ -2,7 +2,9 @@ services:
   - type: web
     name: net
     runtime: docker
-    plan: free
+    # Free plan cannot attach a disk — SQLite is wiped on every deploy/spin-down.
+    # Starter (or any paid plan) is required for /var/data persistence.
+    plan: starter
     healthCheckPath: /api/network-config
     disk:
       name: smartcare-data
@@ -21,8 +23,8 @@ services:
         value: "0552515874"
       - key: SMARTCARE_ADMIN_PASSWORD
         value: "123456"
+      # Generated once; do not rotate on each deploy (would invalidate web cookies).
       - key: SMARTCARE_SECRET
         generateValue: true
-      # اختياري: إن وضعت المفتاح هنا يُزامَن لقاعدة البيانات عند الإقلاع
       - key: SMARTCARE_GEMINI_API_KEY
         sync: false

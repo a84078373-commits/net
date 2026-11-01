@@ -62,6 +62,13 @@ def create_app(settings: Settings | None = None) -> Flask:
         name=os.getenv('SMARTCARE_ADMIN_NAME', 'مدير النظام'),
     )
     database.cleanup()
+    if not cfg.testing:
+        persistent = database.persistence_ok()
+        print(
+            f'[smartcare] db={cfg.db} users={database.user_count()} '
+            f'persistent={"yes" if persistent else "NO — accounts will reset on deploy/spin-down; use Render Starter + disk at /var/data"}',
+            flush=True,
+        )
 
     app = Flask(
         __name__,
@@ -1183,6 +1190,12 @@ def create_app(settings: Settings | None = None) -> Flask:
                 'speed_enabled': cfg.speed_enabled,
                 'public_origin': cfg.public_origin or '',
                 'db_path': cfg.db,
+                'db_persistent': database.persistence_ok(),
+                'persistence_hint': (
+                    None
+                    if database.persistence_ok()
+                    else 'قاعدة البيانات على تخزين مؤقت — ارفع الخدمة لخطة Starter مع قرص /var/data حتى لا تُمسح الحسابات عند كل نشر'
+                ),
             }
         )
 

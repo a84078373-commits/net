@@ -119,17 +119,25 @@ class Database:
                 os.chmod(path, 0o600)
 
     def seed_admin(self, phone='0552515874', password='123456', name='مدير النظام'):
+        """Create admin once. Never wipe users/password on restart unless reset flag is set."""
         salt = secrets.token_hex(16)
         digest = hashlib.pbkdf2_hmac(
             'sha256', password.encode(), bytes.fromhex(salt), 600000
         ).hex()
+        reset = os.getenv('SMARTCARE_ADMIN_RESET_PASSWORD') == '1'
         with self.connect() as db:
             row = db.execute('SELECT id FROM users WHERE phone=?', (phone,)).fetchone()
             if row:
-                db.execute(
-                    'UPDATE users SET name=?, salt=?, password_hash=?, hash_iterations=600000, is_admin=1 WHERE phone=?',
-                    (name, salt, digest, phone),
-                )
+                if reset:
+                    db.execute(
+                        'UPDATE users SET name=?, salt=?, password_hash=?, hash_iterations=600000, is_admin=1 WHERE phone=?',
+                        (name, salt, digest, phone),
+                    )
+                else:
+                    db.execute(
+                        'UPDATE users SET is_admin=1 WHERE phone=?',
+                        (phone,),
+                    )
             else:
                 db.execute(
                     'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin,created_at) VALUES(?,?,?,?,?,?,1,?)',
@@ -152,6 +160,34 @@ class Database:
                         time.time(),
                     ),
                 )
+
+    def persistence_ok(self) -> bool:
+        """True when DB path looks like a mounted persistent volume."""
+        path = Path(self.path).resolve()
+        if os.name != 'posix':
+            return True
+        try:
+            mounts = Path('/proc/mounts').read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            return path.as_posix().startswith('/var/data')
+        # Any mount whose path is a prefix of the DB path counts as persistent.
+        for line in mounts.splitlines():
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            mount = parts[1]
+            if mount != '/' and path.as_posix().startswith(mount.rstrip('/') + '/'):
+                if mount.rstrip('/') in {'/var/data', '/data'} or mount.startswith('/var/data'):
+                    return True
+        return path.as_posix().startswith('/var/data/') and any(
+            line.split()[1].startswith('/var/data')
+            for line in mounts.splitlines()
+            if len(line.split()) >= 2
+        )
+
+    def user_count(self) -> int:
+        with self.connect() as db:
+            return int(db.execute('SELECT count(*) FROM users').fetchone()[0])
 
     @contextmanager
     def connect(self):
