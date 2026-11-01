@@ -151,7 +151,8 @@ class MoreScreen extends StatelessWidget {
         (Icons.notifications_none, 'الإشعارات', const NoticesScreen()),
         (Icons.cloud_sync_outlined, 'الحفظ والمزامنة', const SyncScreen()),
         (Icons.tune, 'الإعدادات', const SettingsScreen()),
-        (Icons.analytics_outlined, 'لوحة البلاغات', const AdminScreen()),
+        if (networkApi.isAdmin)
+          (Icons.admin_panel_settings_outlined, 'لوحة الإدارة', const AdminScreen()),
         (Icons.help_outline, 'المساعدة', const HelpScreen()),
         (Icons.privacy_tip_outlined, 'الخصوصية', const PrivacyScreen()),
       ];
@@ -162,14 +163,9 @@ class MoreScreen extends StatelessWidget {
           CareCard(
             Row(
               children: [
-                const CircleAvatar(
+                const StcProfileAvatar(
                   radius: 28,
                   backgroundColor: StcColors.purpleSoft,
-                  child: Icon(
-                    Icons.person_outline,
-                    color: StcColors.purple,
-                    size: 28,
-                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -246,11 +242,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     title: 'ملفي الشخصي',
     children: [
       const Center(
-        child: CircleAvatar(
-          radius: 46,
-          backgroundColor: _purple,
-          child: Icon(Icons.person, size: 50, color: Colors.white),
-        ),
+        child: StcProfileAvatar(radius: 46, backgroundColor: Colors.white),
       ),
       const SizedBox(height: 24),
       CareCard(
@@ -875,173 +867,238 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen> {
-  String area = 'الكل';
+  Map<String, dynamic>? overview;
+  List<Map<String, dynamic>> users = [], measurements = [];
+  final gemini = TextEditingController();
+  final analyze = TextEditingController();
+  String? geminiMasked, analysis, error;
+  bool loading = true, savingKey = false, analyzing = false;
+
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: appStore,
-    builder: (_, __) {
-      final reports = appStore.reports
-          .where((r) => area == 'الكل' || r.area == area)
-          .toList();
-      final measurements = appStore.measurements
-          .where((m) => area == 'الكل' || m.area == area)
-          .toList();
-      final total = reports.length;
+  void initState() {
+    super.initState();
+    reload();
+  }
+
+  @override
+  void dispose() {
+    gemini.dispose();
+    analyze.dispose();
+    super.dispose();
+  }
+
+  Future<void> reload() async {
+    if (networkApi.token == null || !networkApi.isAdmin) {
+      setState(() {
+        loading = false;
+        error = 'سجّل الدخول بحساب المدير أولًا';
+      });
+      return;
+    }
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final o = await networkApi.request('/api/admin/overview');
+      final u = await networkApi.request('/api/admin/users');
+      final m = await networkApi.request('/api/admin/measurements');
+      final s = await networkApi.request('/api/admin/settings');
+      if (!mounted) return;
+      setState(() {
+        overview = o;
+        users = (u['items'] as List).cast<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        measurements = (m['items'] as List).cast<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        geminiMasked = s['gemini_api_key_masked'] as String?;
+        loading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          error = e.toString();
+          loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> saveGemini() async {
+    if (savingKey) return;
+    setState(() => savingKey = true);
+    try {
+      await networkApi.request(
+        '/api/admin/settings',
+        method: 'PUT',
+        body: {'gemini_api_key': gemini.text.trim()},
+      );
+      gemini.clear();
+      await reload();
+      if (mounted) toast(context, 'تم حفظ إعدادات Gemini');
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => savingKey = false);
+    }
+  }
+
+  Future<void> runAnalyze() async {
+    if (analyzing || analyze.text.trim().length < 3) return;
+    setState(() {
+      analyzing = true;
+      analysis = null;
+    });
+    try {
+      final r = await networkApi.request(
+        '/api/admin/analyze',
+        method: 'POST',
+        body: {'text': analyze.text.trim()},
+      );
+      if (mounted) setState(() => analysis = r['analysis'] as String?);
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => analyzing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!networkApi.isAdmin) {
       return CarePage(
         title: 'لوحة الإدارة',
-        eyebrow: 'OPERATIONS / عرض تجريبي محلي',
         children: [
-          const CareCard(
-            Text(
-              'تعرض هذه اللوحة بيانات هذا الجهاز فقط. الدخول الإداري وصلاحيات الموظفين غير متصلين بخادم.',
-              style: TextStyle(
-                fontSize: 12,
-                color: StcColors.silver,
-                height: 1.7,
-              ),
-            ),
+          emptyState(
+            Icons.lock_outline,
+            'للإدارة فقط',
+            'ادخل بحساب المدير: 0552515874',
           ),
-          DropdownButtonFormField<String>(
-            initialValue: area,
-            decoration: const InputDecoration(labelText: 'نطاق التحليل'),
-            items: [
-              'الكل',
-              ...neighborhoods,
-            ].map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
-            onChanged: (v) => setState(() => area = v!),
+          actionButton(
+            'تسجيل الدخول',
+            () => openCare(context, const AuthScreen()),
+            icon: Icons.login,
           ),
-          const SizedBox(height: 20),
+        ],
+      );
+    }
+    return CarePage(
+      title: 'لوحة الإدارة',
+      eyebrow: 'SERVER ADMIN',
+      actions: [
+        IconButton(onPressed: loading ? null : reload, icon: const Icon(Icons.refresh)),
+      ],
+      children: [
+        if (loading) const LinearProgressIndicator(),
+        if (error != null)
+          CareCard(Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
+        if (overview != null)
           adaptiveMetrics([
-            metric('$total', 'إجمالي البلاغات المحلية', Icons.receipt_long),
-            metric(
-              '${reports.where((r) => r.status != 'مغلق تجريبيًا').length}',
-              'بلاغ مفتوح',
-              Icons.pending_actions,
-            ),
-            metric('${measurements.length}', 'قياس تجريبي', Icons.speed),
+            metric('${overview!['users']}', 'المستخدمون', Icons.people_outline),
+            metric('${overview!['measurements']}', 'القياسات', Icons.speed),
+            metric('${overview!['shared_measurements']}', 'على الخريطة', Icons.map_outlined),
           ]),
-          CareCard(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                titleText('المشكلات الأكثر شيوعًا'),
-                const SizedBox(height: 20),
-                if (total == 0) muted('أنشئ بلاغات لعرض توزيع المشكلات.'),
-                for (final type in [
-                  'بطء الإنترنت',
-                  'ضعف الإشارة',
-                  'انقطاع المكالمات',
-                  'اتصال غير مستقر',
-                ]) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(type, style: const TextStyle(fontSize: 12)),
-                      ),
-                      Text(
-                        '${reports.where((r) => r.category == type).length}',
-                        style: const TextStyle(color: _mint),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 7),
-                  LinearProgressIndicator(
-                    value: total == 0
-                        ? 0
-                        : reports.where((r) => r.category == type).length /
-                              total,
-                    color: _purple,
-                    backgroundColor: const Color(0xFFE8E2EE),
-                    minHeight: 7,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  const SizedBox(height: 18),
-                ],
+        CareCard(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              titleText('مفتاح Gemini للتحليل'),
+              const SizedBox(height: 8),
+              muted(
+                geminiMasked == null || geminiMasked!.isEmpty
+                    ? 'لا يوجد مفتاح محفوظ'
+                    : 'المفتاح الحالي: $geminiMasked',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: gemini,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'مفتاح Gemini API',
+                  hintText: 'الصق المفتاح هنا ثم احفظ',
+                ),
+              ),
+              const SizedBox(height: 12),
+              actionButton(
+                savingKey ? 'جارٍ الحفظ…' : 'حفظ المفتاح',
+                saveGemini,
+                icon: Icons.key,
+              ),
+            ],
+          ),
+        ),
+        CareCard(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              titleText('تحليل بـ Gemini'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: analyze,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'اكتب وصف مشكلة شبكة أو ملخص قياسات…',
+                ),
+              ),
+              const SizedBox(height: 12),
+              actionButton(
+                analyzing ? 'جارٍ التحليل…' : 'حلّل الآن',
+                runAnalyze,
+                icon: Icons.auto_awesome,
+              ),
+              if (analysis != null) ...[
+                const SizedBox(height: 14),
+                Text(analysis!, style: const TextStyle(height: 1.6)),
               ],
+            ],
+          ),
+        ),
+        titleText('المستخدمون'),
+        const SizedBox(height: 12),
+        for (final u in users)
+          CareCard(
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(u['name']?.toString() ?? ''),
+              subtitle: muted(
+                '${u['phone']} • ${u['tests']} قياس${u['is_admin'] == true ? ' • مدير' : ''}',
+              ),
+              trailing: u['is_admin'] == true
+                  ? const Icon(Icons.verified, color: _purple)
+                  : IconButton(
+                      tooltip: 'حذف',
+                      onPressed: () async {
+                        try {
+                          await networkApi.request(
+                            '/api/admin/users/${u['id']}',
+                            method: 'DELETE',
+                          );
+                          await reload();
+                        } catch (e) {
+                          if (mounted) setState(() => error = e.toString());
+                        }
+                      },
+                      icon: const Icon(Icons.delete_outline, color: Colors.orangeAccent),
+                    ),
             ),
           ),
+        titleText('آخر القياسات'),
+        const SizedBox(height: 12),
+        if (measurements.isEmpty) muted('لا توجد قياسات محفوظة بعد.'),
+        for (final m in measurements.take(30))
           CareCard(
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                titleText('أولوية مراجعة الأحياء'),
-                const SizedBox(height: 15),
-                for (final a in (area == 'الكل' ? neighborhoods : [area]))
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(
-                      Icons.location_on_outlined,
-                      color: _mint,
-                    ),
-                    title: Text(a),
-                    subtitle: muted(
-                      '${reports.where((r) => r.area == a).length} بلاغ محلي • ${measurements.where((m) => m.area == a).length} قياس تجريبي',
-                    ),
-                  ),
+                Text(m['phone']?.toString() ?? ''),
+                const SizedBox(height: 6),
                 muted(
-                  'الأعداد من بيانات الجهاز؛ لا تكفي لاستنتاج جودة الشبكة الفعلية.',
+                  '↓ ${(m['download_mbps'] as num?)?.toStringAsFixed(1) ?? '-'} • ↑ ${(m['upload_mbps'] as num?)?.toStringAsFixed(1) ?? '-'} • ${(m['ping_ms'] as num?)?.toStringAsFixed(0) ?? '-'} ms • ${m['connection_type']}',
                 ),
               ],
             ),
           ),
-          titleText('متابعة البلاغات'),
-          const SizedBox(height: 16),
-          if (reports.isEmpty)
-            emptyState(
-              Icons.inbox_outlined,
-              'لا توجد بلاغات للتحليل',
-              'ستظهر البلاغات الجديدة هنا تلقائيًا.',
-            ),
-          for (final r in reports)
-            CareCard(
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    r.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  muted('${r.area} • ${r.category}'),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('${r.id}-${r.status}'),
-                    initialValue: r.status,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'حالة المتابعة المحلية',
-                    ),
-                    items:
-                        [
-                              'بانتظار الربط',
-                              'قيد المراجعة التجريبية',
-                              'مغلق تجريبيًا',
-                            ]
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s,
-                                child: Text(
-                                  s,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                    onChanged: (v) => appStore.updateStatus(r, v!),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        openCare(context, ReportDetailScreen(report: r)),
-                    child: const Text('عرض تفاصيل البلاغ'),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      );
-    },
-  );
+      ],
+    );
+  }
 }
 
 class HelpScreen extends StatelessWidget {

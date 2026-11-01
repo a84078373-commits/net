@@ -13,3 +13,7 @@ services:
         value: https://net-71nf.onrender.com,http://localhost:8080,http://127.0.0.1:8080
       - key: SMARTCARE_DB
         value: /var/data/smartcare.sqlite3
+      - key: SMARTCARE_ADMIN_PHONE
+        value: "0552515874"
+      - key: SMARTCARE_ADMIN_PASSWORD
+        value: "123456"

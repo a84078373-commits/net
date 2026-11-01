@@ -55,17 +55,24 @@ class NetworkApi extends ChangeNotifier {
   }) async {
     try {
       final target = uri(path, query);
-      final response =
-          await (method == 'POST'
-                  ? client.post(
-                      target,
-                      headers: headers,
-                      body: jsonEncode(body ?? {}),
-                    )
-                  : method == 'DELETE'
-                  ? client.delete(target, headers: headers)
-                  : client.get(target, headers: headers))
-              .timeout(const Duration(seconds: 15));
+      late final http.Response response;
+      if (method == 'POST') {
+        response = await client
+            .post(target, headers: headers, body: jsonEncode(body ?? {}))
+            .timeout(const Duration(seconds: 45));
+      } else if (method == 'PUT') {
+        response = await client
+            .put(target, headers: headers, body: jsonEncode(body ?? {}))
+            .timeout(const Duration(seconds: 45));
+      } else if (method == 'DELETE') {
+        response = await client
+            .delete(target, headers: headers)
+            .timeout(const Duration(seconds: 45));
+      } else {
+        response = await client
+            .get(target, headers: headers)
+            .timeout(const Duration(seconds: 45));
+      }
       if (response.statusCode == 401) {
         token = null;
         user = null;
@@ -85,7 +92,9 @@ class NetworkApi extends ChangeNotifier {
     } on NetworkFailure {
       rethrow;
     } on TimeoutException {
-      throw const NetworkFailure('انتهت مهلة الخدمة؛ لم تُنشأ نتائج بديلة');
+      throw const NetworkFailure(
+        'انتهت مهلة الخدمة؛ خادم Render قد يكون في إقلاع أول، أعد المحاولة خلال ثوانٍ',
+      );
     } catch (_) {
       throw const NetworkFailure(
         'تعذر الاتصال بخدمة الشبكة. تحقق من اتصالك وإعداد عنوان API',
@@ -128,6 +137,8 @@ class NetworkApi extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  bool get isAdmin => user?['is_admin'] == true;
 }
 
 class MapFilters {

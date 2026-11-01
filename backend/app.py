@@ -27,6 +27,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 ROOT = Path(__file__).parent
@@ -90,8 +91,9 @@ class Database:
         with self.connect() as db:
             db.executescript('''
               PRAGMA journal_mode=WAL;
-              CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, phone TEXT UNIQUE NOT NULL, name TEXT NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, hash_iterations INTEGER NOT NULL DEFAULT 600000);
+              CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, phone TEXT UNIQUE NOT NULL, name TEXT NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, hash_iterations INTEGER NOT NULL DEFAULT 600000, is_admin INTEGER NOT NULL DEFAULT 0);
               CREATE TABLE IF NOT EXISTS auth_sessions(token_hash TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id) ON DELETE CASCADE, expires REAL NOT NULL);
+              CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at REAL NOT NULL);
               CREATE TABLE IF NOT EXISTS network_measurements(
                 id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 download_mbps REAL NOT NULL, upload_mbps REAL NOT NULL, ping_ms REAL NOT NULL,
@@ -103,10 +105,35 @@ class Database:
               CREATE INDEX IF NOT EXISTS measurement_geo_time ON network_measurements(cell_y,cell_x,measurement_time);
               CREATE INDEX IF NOT EXISTS measurement_time ON network_measurements(measurement_time);
             ''')
-            if 'hash_iterations' not in {r[1] for r in db.execute('PRAGMA table_info(users)')}:
+            cols = {r[1] for r in db.execute('PRAGMA table_info(users)')}
+            if 'hash_iterations' not in cols:
                 db.execute('ALTER TABLE users ADD COLUMN hash_iterations INTEGER NOT NULL DEFAULT 310000')
+            if 'is_admin' not in cols:
+                db.execute('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0')
         if os.name == 'posix':
-            os.chmod(path,0o600)
+            with suppress(OSError):
+                os.chmod(path,0o600)
+
+    def seed_admin(self, phone='0552515874', password='123456', name='مدير النظام'):
+        salt = secrets.token_hex(16)
+        digest = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), 600000).hex()
+        with self.connect() as db:
+            row = db.execute('SELECT id FROM users WHERE phone=?', (phone,)).fetchone()
+            if row:
+                db.execute(
+                    'UPDATE users SET name=?, salt=?, password_hash=?, hash_iterations=600000, is_admin=1 WHERE phone=?',
+                    (name, salt, digest, phone),
+                )
+            else:
+                db.execute(
+                    'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin) VALUES(?,?,?,?,?,?,1)',
+                    (secrets.token_urlsafe(18), phone, name, salt, digest, 600000),
+                )
+            if os.getenv('SMARTCARE_GEMINI_API_KEY'):
+                db.execute(
+                    'INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
+                    ('gemini_api_key', os.getenv('SMARTCARE_GEMINI_API_KEY'), time.time()),
+                )
     @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=15)
@@ -128,6 +155,11 @@ class Database:
 def create_app(settings=None):
     cfg = settings or Settings(db=os.getenv('SMARTCARE_DB', Settings.db), public_origin=os.getenv('SMARTCARE_PUBLIC_ORIGIN', ''), speed_enabled=os.getenv('SMARTCARE_SPEED_ENABLED') == '1', cors_origins=tuple(os.getenv('SMARTCARE_CORS', 'http://localhost:8080,http://127.0.0.1:8080').split(',')))
     database = Database(cfg.db)
+    database.seed_admin(
+        phone=os.getenv('SMARTCARE_ADMIN_PHONE', '0552515874'),
+        password=os.getenv('SMARTCARE_ADMIN_PASSWORD', '123456'),
+        name=os.getenv('SMARTCARE_ADMIN_NAME', 'مدير النظام'),
+    )
     @asynccontextmanager
     async def lifespan(app):
         database.cleanup()
@@ -175,7 +207,7 @@ def create_app(settings=None):
             return False
     available = speed_available()
     local_speed = available and not cfg.testing and loopback_origin(cfg.public_origin)
-    app.add_middleware(CORSMiddleware, allow_origins=list(cfg.cors_origins), allow_methods=['GET','POST','DELETE'], allow_headers=['Authorization','Content-Type','X-Test-Session','Cache-Control'], expose_headers=['Content-Length','Content-Encoding'], max_age=600)
+    app.add_middleware(CORSMiddleware, allow_origins=list(cfg.cors_origins), allow_methods=['GET','POST','PUT','DELETE'], allow_headers=['Authorization','Content-Type','X-Test-Session','Cache-Control'], expose_headers=['Content-Length','Content-Encoding'], max_age=600)
 
     def throttle(key, count, seconds):
         now = time.monotonic()
@@ -208,7 +240,7 @@ def create_app(settings=None):
                 return Response(status_code=413)
         except ValueError:
             return Response(status_code=400)
-        if request.method in ('POST','DELETE') and request.url.path != '/api/speed/upload':
+        if request.method in ('POST','PUT','DELETE') and request.url.path != '/api/speed/upload':
             # Bound chunked bodies too, before Pydantic reads them.
             raw = bytearray()
             async for chunk in request.stream():
@@ -228,10 +260,12 @@ def create_app(settings=None):
             raise HTTPException(401, 'يلزم تسجيل الدخول بالخادم')
         digest = hashlib.sha256(auth[7:].encode()).hexdigest()
         with database.connect() as db:
-            row = db.execute('SELECT u.id,u.name,u.phone FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>?', (digest,time.time())).fetchone()
+            row = db.execute('SELECT u.id,u.name,u.phone,u.is_admin FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>?', (digest,time.time())).fetchone()
         if not row:
             raise HTTPException(401, 'انتهت جلسة الدخول')
-        return dict(row)
+        user = dict(row)
+        user['is_admin'] = bool(user.get('is_admin'))
+        return user
 
     @app.get('/api/network-config')
     def config():
@@ -241,17 +275,30 @@ def create_app(settings=None):
         token = secrets.token_urlsafe(32)
         with database.connect() as db:
             db.execute('INSERT INTO auth_sessions VALUES(?,?,?)', (hashlib.sha256(token.encode()).hexdigest(),user['id'],time.time()+8*3600))
-        return {'token':token, 'user':{k:user[k] for k in ('id','name','phone')}, 'expires_in':28800, 'phone_verified':False}
+        return {'token':token, 'user':{'id':user['id'],'name':user['name'],'phone':user['phone'],'is_admin':bool(user.get('is_admin'))}, 'expires_in':28800, 'phone_verified':False}
+
+    def require_admin(user):
+        if not user.get('is_admin'):
+            raise HTTPException(403, 'هذه الصفحة للمدير فقط')
+        return user
+
+    class AdminSettingsIn(BaseModel):
+        model_config = ConfigDict(extra='forbid', strict=True)
+        gemini_api_key: str = Field(default='', max_length=200)
+
+    class AnalyzeIn(BaseModel):
+        model_config = ConfigDict(extra='forbid', strict=True)
+        text: str = Field(min_length=3, max_length=4000)
 
     @app.post('/api/auth/register', status_code=201)
     def register(data: Credentials, request: Request):
         throttle(('auth',request.client.host), 40 if (cfg.testing or cfg.speed_enabled) else 8, 900)
         salt = secrets.token_hex(16)
         digest = hashlib.pbkdf2_hmac('sha256', data.password.encode(), bytes.fromhex(salt),600000).hex()
-        user = {'id':secrets.token_urlsafe(18),'name':data.name.strip() or 'مستخدم SmartCare','phone':data.phone}
+        user = {'id':secrets.token_urlsafe(18),'name':data.name.strip() or 'مستخدم SmartCare','phone':data.phone,'is_admin':False}
         try:
             with database.connect() as db:
-                db.execute('INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations) VALUES(?,?,?,?,?,?)',(user['id'],user['phone'],user['name'],salt,digest,600000))
+                db.execute('INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin) VALUES(?,?,?,?,?,?,0)',(user['id'],user['phone'],user['name'],salt,digest,600000))
         except sqlite3.IntegrityError:
             raise HTTPException(409,'تعذر إنشاء الحساب؛ جرّب تسجيل الدخول')
         return issue_token(user)
@@ -478,6 +525,110 @@ def create_app(settings=None):
             for key in list(sessions):
                 if sessions[key]['user']==user['id']: del sessions[key]
         return Response(status_code=204)
+
+    @app.get('/api/admin/overview')
+    def admin_overview(user=Depends(current_user)):
+        require_admin(user)
+        with database.connect() as db:
+            users_count = db.execute('SELECT count(*) FROM users').fetchone()[0]
+            tests_count = db.execute('SELECT count(*) FROM network_measurements').fetchone()[0]
+            shared = db.execute('SELECT count(*) FROM network_measurements WHERE cell_y IS NOT NULL').fetchone()[0]
+            gemini = db.execute("SELECT value FROM app_settings WHERE key='gemini_api_key'").fetchone()
+        return {
+            'users': users_count,
+            'measurements': tests_count,
+            'shared_measurements': shared,
+            'gemini_configured': bool(gemini and gemini['value']),
+            'db_path': cfg.db,
+        }
+
+    @app.get('/api/admin/users')
+    def admin_users(user=Depends(current_user)):
+        require_admin(user)
+        with database.connect() as db:
+            rows = db.execute(
+                '''SELECT u.id,u.phone,u.name,u.is_admin,
+                          (SELECT count(*) FROM network_measurements m WHERE m.user_id=u.id) AS tests
+                   FROM users u ORDER BY u.is_admin DESC, u.phone'''
+            ).fetchall()
+        return {'items':[{**dict(r),'is_admin':bool(r['is_admin'])} for r in rows]}
+
+    @app.get('/api/admin/measurements')
+    def admin_measurements(limit:int=Query(50,ge=1,le=200),offset:int=Query(0,ge=0),user=Depends(current_user)):
+        require_admin(user)
+        with database.connect() as db:
+            rows = db.execute(
+                '''SELECT m.id,m.user_id,u.phone,m.download_mbps,m.upload_mbps,m.ping_ms,m.connection_type,
+                          m.cell_y,m.cell_x,m.measurement_time,m.test_status
+                   FROM network_measurements m JOIN users u ON u.id=m.user_id
+                   ORDER BY m.measurement_time DESC LIMIT ? OFFSET ?''',
+                (limit, offset),
+            ).fetchall()
+        return {'items':[dict(r) for r in rows],'limit':limit,'offset':offset}
+
+    @app.get('/api/admin/settings')
+    def admin_settings_get(user=Depends(current_user)):
+        require_admin(user)
+        with database.connect() as db:
+            row = db.execute("SELECT value FROM app_settings WHERE key='gemini_api_key'").fetchone()
+        key = row['value'] if row else ''
+        masked = (key[:4] + '…' + key[-4:]) if len(key) > 10 else ('مضبوط' if key else '')
+        return {'gemini_api_key_set': bool(key), 'gemini_api_key_masked': masked}
+
+    @app.put('/api/admin/settings')
+    def admin_settings_put(data: AdminSettingsIn, user=Depends(current_user)):
+        require_admin(user)
+        key = data.gemini_api_key.strip()
+        with database.connect() as db:
+            if key:
+                db.execute(
+                    'INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
+                    ('gemini_api_key', key, time.time()),
+                )
+            else:
+                db.execute("DELETE FROM app_settings WHERE key='gemini_api_key'")
+        return {'ok': True, 'gemini_api_key_set': bool(key)}
+
+    @app.post('/api/admin/analyze')
+    async def admin_analyze(data: AnalyzeIn, user=Depends(current_user)):
+        require_admin(user)
+        with database.connect() as db:
+            row = db.execute("SELECT value FROM app_settings WHERE key='gemini_api_key'").fetchone()
+        if not row or not row['value']:
+            raise HTTPException(400, 'أدخل مفتاح Gemini من إعدادات الإدارة أولًا')
+        payload = {
+            'contents': [{'parts': [{'text':
+                'أنت مساعد تحليل شبكة اتصالات لحائل. أجب بالعربية باختصار ووضوح.\n\n' + data.text}]}],
+        }
+        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+        try:
+            async with httpx.AsyncClient(timeout=45) as client:
+                response = await client.post(url, params={'key': row['value']}, json=payload)
+        except httpx.HTTPError:
+            raise HTTPException(502, 'تعذر الاتصال بخدمة Gemini')
+        if response.status_code >= 400:
+            raise HTTPException(502, 'رفض Gemini المفتاح أو الطلب؛ تحقق من المفتاح')
+        body = response.json()
+        try:
+            text = body['candidates'][0]['content']['parts'][0]['text']
+        except (KeyError, IndexError, TypeError):
+            raise HTTPException(502, 'استجابة Gemini غير صالحة')
+        return {'analysis': text}
+
+    @app.delete('/api/admin/users/{user_id}', status_code=204)
+    def admin_delete_user(user_id: str, user=Depends(current_user)):
+        require_admin(user)
+        if user_id == user['id']:
+            raise HTTPException(400, 'لا يمكن حذف حساب المدير الحالي من هنا')
+        with database.connect() as db:
+            target = db.execute('SELECT is_admin FROM users WHERE id=?', (user_id,)).fetchone()
+            if not target:
+                raise HTTPException(404, 'المستخدم غير موجود')
+            if target['is_admin']:
+                raise HTTPException(400, 'لا يُحذف حساب مدير آخر من الواجهة')
+            db.execute('DELETE FROM users WHERE id=?', (user_id,))
+        return Response(status_code=204)
+
     return app
 
 app=create_app()
