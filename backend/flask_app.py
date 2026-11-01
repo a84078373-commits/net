@@ -1044,29 +1044,85 @@ def create_app(settings: Settings | None = None) -> Flask:
                 }
             ]
         }
-        # Try current flash model, then a stable fallback.
-        models = (
+        api_key = row['value']
+        base = 'https://generativelanguage.googleapis.com/v1beta'
+
+        def model_id(name: str) -> str:
+            return name.split('/', 1)[-1] if name else ''
+
+        def preferred_models(available: list[str]) -> list[str]:
+            rank = [
+                'gemini-flash-latest',
+                'gemini-2.5-flash',
+                'gemini-2.5-flash-lite',
+                'gemini-2.0-flash',
+                'gemini-2.0-flash-lite',
+                'gemini-3.8-flash',
+                'gemini-3.6-flash',
+                'gemini-3.5-flash-lite',
+                'gemini-pro-latest',
+            ]
+            ordered = [m for m in rank if m in available]
+            for m in available:
+                if m not in ordered and 'flash' in m and 'image' not in m and 'tts' not in m:
+                    ordered.append(m)
+            for m in available:
+                if m not in ordered and 'gemini' in m and 'embed' not in m:
+                    ordered.append(m)
+            return ordered or list(available)
+
+        try:
+            listed = httpx.get(
+                f'{base}/models', params={'key': api_key, 'pageSize': 100}, timeout=30
+            )
+        except httpx.HTTPError:
+            raise _ApiError(502, 'تعذر الاتصال بخدمة Gemini')
+        if listed.status_code >= 400:
+            detail = 'مفتاح Gemini مرفوض أو غير صالح'
+            try:
+                err = listed.json().get('error', {}).get('message')
+                if err:
+                    detail = f'رفض Gemini: {err}'
+            except Exception:
+                pass
+            raise _ApiError(502, detail)
+
+        available = []
+        try:
+            for item in listed.json().get('models', []):
+                methods = item.get('supportedGenerationMethods') or item.get(
+                    'supported_generation_methods'
+                ) or []
+                if 'generateContent' not in methods:
+                    continue
+                mid = model_id(item.get('name', ''))
+                if mid:
+                    available.append(mid)
+        except Exception:
+            available = []
+
+        # Hardcoded fallbacks if listing is empty/unexpected.
+        models = preferred_models(available) or [
+            'gemini-flash-latest',
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
             'gemini-2.0-flash',
-            'gemini-2.0-flash-lite',
-            'gemini-1.5-flash',
-        )
-        last_status = None
+        ]
+
         last_body = None
         try:
             for model in models:
-                url = (
-                    f'https://generativelanguage.googleapis.com/v1beta/models/'
-                    f'{model}:generateContent'
-                )
                 response = httpx.post(
-                    url, params={'key': row['value']}, json=payload, timeout=45
+                    f'{base}/models/{model}:generateContent',
+                    params={'key': api_key},
+                    json=payload,
+                    timeout=45,
                 )
-                last_status = response.status_code
                 last_body = response
                 if response.status_code < 400:
                     break
             else:
-                detail = 'رفض Gemini المفتاح أو الطلب؛ تحقق من المفتاح'
+                detail = 'لا يوجد نموذج Gemini متاح لهذا المفتاح'
                 try:
                     err = last_body.json().get('error', {}).get('message')
                     if err:
@@ -1080,7 +1136,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             analysis = last_body.json()['candidates'][0]['content']['parts'][0]['text']
         except (KeyError, IndexError, TypeError):
             raise _ApiError(502, 'استجابة Gemini غير صالحة')
-        return jsonify({'analysis': analysis})
+        return jsonify({'analysis': analysis, 'model': model})
 
     @app.delete('/api/admin/users/<user_id>')
     def admin_delete_user(user_id):
