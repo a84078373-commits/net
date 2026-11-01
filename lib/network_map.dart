@@ -10,9 +10,8 @@ import 'theme.dart';
 
 const _city = LatLng(27.5219, 41.6907);
 const _customTileUrl = String.fromEnvironment('SMARTCARE_TILE_URL');
-const _lightTiles =
-    'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
-const _darkTiles = 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+// Free OSM tiles — no API key (Carto CDN now requires a key).
+const _osmTiles = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const _views = [
   LatLng(27.549, 41.697),
   LatLng(27.485, 41.704),
@@ -679,14 +678,9 @@ class _NetworkMapState extends State<NetworkMap> {
         children: [
           TileLayer(
             key: ValueKey(dark ? 'dark' : 'light'),
-            urlTemplate: _customTileUrl.isNotEmpty
-                ? _customTileUrl
-                : dark
-                ? _darkTiles
-                : _lightTiles,
-            tileBuilder: (context, tile, _) => dark && _customTileUrl.isNotEmpty
-                ? darkModeTilesContainerBuilder(context, tile)
-                : tile,
+            urlTemplate: _customTileUrl.isNotEmpty ? _customTileUrl : _osmTiles,
+            tileBuilder: (context, tile, _) =>
+                dark ? darkModeTilesContainerBuilder(context, tile) : tile,
             userAgentPackageName: 'sa.hail.smartcare.networkmap',
             maxNativeZoom: 19,
             panBuffer: 0,
