@@ -1,19 +1,15 @@
 services:
   - type: web
-    name: smartcare-hail-api
-    runtime: python
+    name: net
+    runtime: docker
     plan: free
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: mkdir -p backend/data && uvicorn backend.app:app --host 0.0.0.0 --port $PORT --workers 1 --no-access-log
     healthCheckPath: /api/network-config
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.8"
       - key: SMARTCARE_SPEED_ENABLED
         value: "1"
       - key: SMARTCARE_PUBLIC_ORIGIN
-        value: https://smartcare-hail-api.onrender.com
+        value: https://net-71nf.onrender.com
       - key: SMARTCARE_CORS
-        value: https://smartcare-hail-api.onrender.com,http://localhost:8080,http://127.0.0.1:8080
+        value: https://net-71nf.onrender.com,http://localhost:8080,http://127.0.0.1:8080
       - key: SMARTCARE_DB
-        value: /opt/render/project/src/backend/data/smartcare.sqlite3
+        value: /var/data/smartcare.sqlite3

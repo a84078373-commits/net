@@ -4,7 +4,10 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    SMARTCARE_DB=/var/data/smartcare.sqlite3
+    SMARTCARE_DB=/var/data/smartcare.sqlite3 \
+    SMARTCARE_SPEED_ENABLED=1 \
+    SMARTCARE_PUBLIC_ORIGIN=https://net-71nf.onrender.com \
+    SMARTCARE_CORS=https://net-71nf.onrender.com,http://localhost:8080,http://127.0.0.1:8080
 
 RUN mkdir -p /var/data
 

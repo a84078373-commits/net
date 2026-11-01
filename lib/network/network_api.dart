@@ -20,7 +20,7 @@ class NetworkApi extends ChangeNotifier {
   NetworkApi({
     this.baseUrl = const String.fromEnvironment(
       'SMARTCARE_API_URL',
-      defaultValue: 'https://smartcare-hail-api.onrender.com',
+      defaultValue: 'https://net-71nf.onrender.com',
     ),
     http.Client? client,
   }) : client = client ?? http.Client();
