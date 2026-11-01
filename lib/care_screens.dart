@@ -974,7 +974,7 @@ class _AdminScreenState extends State<AdminScreen>
     });
     try {
       final r = await networkApi.request(
-        '/api/admin/analyze',
+        '/api/ai/analyze',
         method: 'POST',
         body: {'text': analyze.text.trim()},
       );
@@ -1319,12 +1319,16 @@ class _AdminScreenState extends State<AdminScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              titleText('مفتاح Gemini للتحليل'),
+              titleText('مفتاح Gemini للخادم بالكامل'),
+              const SizedBox(height: 8),
+              muted(
+                'يُحفظ مرة واحدة في قاعدة البيانات ويُستخدم لكل المستخدمين في الويب والتطبيق.',
+              ),
               const SizedBox(height: 8),
               muted(
                 geminiMasked == null || geminiMasked!.isEmpty
-                    ? 'لا يوجد مفتاح محفوظ — أضفه لتفعيل التحليل الذكي'
-                    : 'المفتاح الحالي: $geminiMasked',
+                    ? 'لا يوجد مفتاح محفوظ بعد'
+                    : 'المفتاح المحفوظ: $geminiMasked',
               ),
               const SizedBox(height: 12),
               TextField(
@@ -1332,12 +1336,12 @@ class _AdminScreenState extends State<AdminScreen>
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: 'مفتاح Gemini API',
-                  hintText: 'الصق المفتاح هنا ثم احفظ',
+                  hintText: 'الصق المفتاح هنا ثم احفظ مرة واحدة',
                 ),
               ),
               const SizedBox(height: 12),
               actionButton(
-                savingKey ? 'جارٍ الحفظ…' : 'حفظ المفتاح',
+                savingKey ? 'جارٍ الحفظ…' : 'حفظ في قاعدة البيانات',
                 saveGemini,
                 icon: Icons.key,
               ),
@@ -1348,7 +1352,7 @@ class _AdminScreenState extends State<AdminScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              titleText('تحليل شبكة بـ Gemini'),
+              titleText('تجربة التحليل'),
               const SizedBox(height: 12),
               TextField(
                 controller: analyze,
@@ -1378,10 +1382,130 @@ class _AdminScreenState extends State<AdminScreen>
               const SizedBox(height: 8),
               muted('رقم المدير: 0552515874'),
               muted('API: ${networkApi.baseUrl}'),
-              muted('الحساب الحالي يملك صلاحية حذف المستخدمين والقياسات وضبط Gemini.'),
+              muted('بعد الحفظ لا تحتاج إعادة إدخال المفتاح في كل مرة.'),
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class AiAssistScreen extends StatefulWidget {
+  const AiAssistScreen({super.key});
+  @override
+  State<AiAssistScreen> createState() => _AiAssistScreenState();
+}
+
+class _AiAssistScreenState extends State<AiAssistScreen> {
+  final text = TextEditingController();
+  String? result, error;
+  bool loading = false, available = false, checking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _status();
+  }
+
+  @override
+  void dispose() {
+    text.dispose();
+    super.dispose();
+  }
+
+  Future<void> _status() async {
+    if (networkApi.token == null) {
+      setState(() {
+        checking = false;
+        available = false;
+        error = 'سجّل الدخول لاستخدام التحليل الذكي';
+      });
+      return;
+    }
+    try {
+      final s = await networkApi.request('/api/ai/status');
+      if (!mounted) return;
+      setState(() {
+        available = s['available'] == true;
+        checking = false;
+        error = available ? null : (s['reason']?.toString());
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        checking = false;
+        error = e.toString();
+      });
+    }
+  }
+
+  Future<void> _run() async {
+    final body = text.text.trim();
+    if (body.length < 3 || loading) return;
+    setState(() {
+      loading = true;
+      error = null;
+      result = null;
+    });
+    try {
+      final r = await networkApi.request(
+        '/api/ai/analyze',
+        method: 'POST',
+        body: {'text': body},
+      );
+      if (!mounted) return;
+      setState(() => result = r['analysis']?.toString());
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CarePage(
+      title: 'مساعد التحليل الذكي',
+      eyebrow: 'GEMINI • SERVER KEY',
+      children: [
+        CareCard(
+          muted(
+            'يستخدم مفتاح Gemini الذي حفظه المدير مرة واحدة في قاعدة بيانات الخادم — مشترك للويب والتطبيق.',
+          ),
+        ),
+        if (checking) const LinearProgressIndicator(),
+        if (error != null)
+          CareCard(Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
+        if (!checking && networkApi.token == null)
+          actionButton(
+            'تسجيل الدخول',
+            () => openCare(context, const AuthScreen()),
+            icon: Icons.login,
+          ),
+        if (available) ...[
+          CareCard(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: text,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    hintText: 'صف مشكلة الشبكة أو الصق ملخص قياس…',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                actionButton(
+                  loading ? 'جارٍ التحليل…' : 'حلّل الآن',
+                  _run,
+                  icon: Icons.auto_awesome,
+                ),
+              ],
+            ),
+          ),
+          if (result != null) CareCard(Text(result!, style: const TextStyle(height: 1.6))),
+        ],
       ],
     );
   }
@@ -1402,7 +1526,7 @@ class HelpScreen extends StatelessWidget {
         ),
         (
           'هل القياسات حقيقية؟',
-          'خدمة القياس تنقل بيانات فعلية عند إعداد خادم عام. دون الخدمة لا يظهر قياس. الخريطة تعرض خلايا مجمعة فقط، والطرق من CARTO اعتمادًا على بيانات OpenStreetMap.',
+          'خدمة القياس تنقل بيانات فعلية عند إعداد خادم عام. دون الخدمة لا يظهر قياس. الخريطة تعرض خلايا مجمعة فقط، والطرق من OpenStreetMap.',
         ),
         (
           'هل يصل البلاغ إلى STC؟',

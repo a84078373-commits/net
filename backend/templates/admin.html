@@ -15,12 +15,17 @@
   <div id="users" class="tabpane"></div>
   <div id="measurements" class="tabpane"></div>
   <div id="ai" class="tabpane">
-    <label>مفتاح Gemini
-      <input id="gemini" type="password" placeholder="الصق المفتاح ثم احفظ">
+    <p class="muted">
+      احفظ مفتاح Gemini <strong>مرة واحدة</strong> هنا. يُخزَّن في قاعدة بيانات الخادم ويُستخدم تلقائيًا
+      لكل المستخدمين في الويب والتطبيق عبر صفحة/شاشة الذكاء — بدون إعادة إدخال.
+    </p>
+    <label>مفتاح Gemini (للخادم بالكامل)
+      <input id="gemini" type="password" placeholder="الصق المفتاح ثم احفظ مرة واحدة">
     </label>
-    <button type="button" id="saveKey" class="primary">حفظ المفتاح</button>
+    <button type="button" id="saveKey" class="primary">حفظ في قاعدة البيانات</button>
     <p id="keyStatus" class="muted"></p>
-    <label>نص للتحليل
+    <hr style="border:0;border-top:1px solid #e6e6e6;margin:18px 0">
+    <label>تجربة تحليل (نفس المفتاح المحفوظ للجميع)
       <textarea id="analyzeText" rows="4" placeholder="صف مشكلة شبكة مثل: ضعف التحميل مساءً في وسط حائل"></textarea>
     </label>
     <button type="button" id="runAnalyze" class="primary">حلّل الآن</button>
@@ -121,7 +126,7 @@ document.getElementById('runAnalyze').onclick = async () => {
   try {
     show('');
     document.getElementById('analysis').textContent = 'جارٍ التحليل…';
-    const r = await api('/api/admin/analyze', {
+    const r = await api('/api/ai/analyze', {
       method: 'POST',
       body: JSON.stringify({text})
     });

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}مساعد التحليل الذكي{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>مساعد التحليل الذكي</h1>
+  <p class="muted">
+    يستخدم مفتاح Gemini الذي حفظه المدير في قاعدة بيانات الخادم — مرة واحدة للجميع (ويب + تطبيق).
+  </p>
+  {% if not available %}
+    <div class="alert">الخدمة غير مفعّلة بعد. يحتاج المدير حفظ مفتاح Gemini من لوحة الإدارة.</div>
+  {% else %}
+    <p class="muted" style="color:#2e7d32">الذكاء الاصطناعي جاهز على الخادم.</p>
+    <label>صف مشكلة الشبكة أو الصق ملخص قياس
+      <textarea id="text" rows="5" placeholder="مثال: التحميل ضعيف مساءً على 5G في حي النقرة"></textarea>
+    </label>
+    <div class="row" style="margin-top:12px">
+      <button type="button" id="run" class="primary">حلّل الآن</button>
+    </div>
+    <div id="msg" class="alert" hidden></div>
+    <pre id="out" class="box"></pre>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+{% if available %}
+<script>
+const TOKEN = {{ token|tojson }};
+document.getElementById('run').onclick = async () => {
+  const text = document.getElementById('text').value.trim();
+  const msg = document.getElementById('msg');
+  const out = document.getElementById('out');
+  msg.hidden = true;
+  if (text.length < 3) {
+    msg.hidden = false;
+    msg.textContent = 'اكتب وصفًا أطول قليلاً';
+    return;
+  }
+  out.textContent = 'جارٍ التحليل…';
+  try {
+    const res = await fetch('/api/ai/analyze', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({text})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'فشل التحليل');
+    out.textContent = data.analysis || '';
+  } catch (e) {
+    out.textContent = '';
+    msg.hidden = false;
+    msg.textContent = e.message || String(e);
+  }
+};
+</script>
+{% endif %}
+{% endblock %}

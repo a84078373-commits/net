@@ -569,6 +569,11 @@ class MystcMoreTab extends StatelessWidget {
             () => openCare(context, const AdminScreen()),
           ),
           (
+            Icons.auto_awesome,
+            'مساعد التحليل الذكي',
+            () => openCare(context, const AiAssistScreen()),
+          ),
+          (
             Icons.sim_card_outlined,
             'فحص سرعة الشبكة',
             () => openCare(context, const NetworkTestScreen()),

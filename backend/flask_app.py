@@ -395,8 +395,138 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     # ─── API routes ─────────────────────────────────────────────
 
+    def get_stored_gemini_key() -> str:
+        with database.connect() as db:
+            row = db.execute(
+                "SELECT value FROM app_settings WHERE key='gemini_api_key'"
+            ).fetchone()
+        return (row['value'] if row and row['value'] else '') or ''
+
+    def run_gemini_analysis(text: str) -> dict:
+        api_key = get_stored_gemini_key()
+        if not api_key:
+            raise _ApiError(
+                400,
+                'لم يضبط المدير مفتاح Gemini بعد؛ احفظه مرة واحدة من لوحة الإدارة',
+            )
+        payload = {
+            'contents': [
+                {
+                    'parts': [
+                        {
+                            'text': 'أنت مساعد تحليل شبكة اتصالات لحائل. أجب بالعربية باختصار ووضوح.\n\n'
+                            + text
+                        }
+                    ]
+                }
+            ]
+        }
+        base = 'https://generativelanguage.googleapis.com/v1beta'
+
+        def model_id(name: str) -> str:
+            return name.split('/', 1)[-1] if name else ''
+
+        def preferred_models(available_models: list[str]) -> list[str]:
+            rank = [
+                'gemini-flash-latest',
+                'gemini-2.5-flash',
+                'gemini-2.5-flash-lite',
+                'gemini-2.0-flash',
+                'gemini-2.0-flash-lite',
+                'gemini-3.8-flash',
+                'gemini-3.6-flash',
+                'gemini-3.5-flash-lite',
+                'gemini-pro-latest',
+            ]
+            ordered = [m for m in rank if m in available_models]
+            for m in available_models:
+                if (
+                    m not in ordered
+                    and 'flash' in m
+                    and 'image' not in m
+                    and 'tts' not in m
+                ):
+                    ordered.append(m)
+            for m in available_models:
+                if m not in ordered and 'gemini' in m and 'embed' not in m:
+                    ordered.append(m)
+            return ordered or list(available_models)
+
+        try:
+            listed = httpx.get(
+                f'{base}/models',
+                params={'key': api_key, 'pageSize': 100},
+                timeout=30,
+            )
+        except httpx.HTTPError:
+            raise _ApiError(502, 'تعذر الاتصال بخدمة Gemini')
+        if listed.status_code >= 400:
+            detail = 'مفتاح Gemini مرفوض أو غير صالح'
+            try:
+                err = listed.json().get('error', {}).get('message')
+                if err:
+                    detail = f'رفض Gemini: {err}'
+            except Exception:
+                pass
+            raise _ApiError(502, detail)
+
+        available_models = []
+        try:
+            for item in listed.json().get('models', []):
+                methods = (
+                    item.get('supportedGenerationMethods')
+                    or item.get('supported_generation_methods')
+                    or []
+                )
+                if 'generateContent' not in methods:
+                    continue
+                mid = model_id(item.get('name', ''))
+                if mid:
+                    available_models.append(mid)
+        except Exception:
+            available_models = []
+
+        models = preferred_models(available_models) or [
+            'gemini-flash-latest',
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
+            'gemini-2.0-flash',
+        ]
+
+        last_body = None
+        used_model = None
+        try:
+            for model in models:
+                response = httpx.post(
+                    f'{base}/models/{model}:generateContent',
+                    params={'key': api_key},
+                    json=payload,
+                    timeout=45,
+                )
+                last_body = response
+                used_model = model
+                if response.status_code < 400:
+                    break
+            else:
+                detail = 'لا يوجد نموذج Gemini متاح لهذا المفتاح'
+                try:
+                    err = last_body.json().get('error', {}).get('message')
+                    if err:
+                        detail = f'رفض Gemini: {err}'
+                except Exception:
+                    pass
+                raise _ApiError(502, detail)
+        except httpx.HTTPError:
+            raise _ApiError(502, 'تعذر الاتصال بخدمة Gemini')
+        try:
+            analysis = last_body.json()['candidates'][0]['content']['parts'][0]['text']
+        except (KeyError, IndexError, TypeError):
+            raise _ApiError(502, 'استجابة Gemini غير صالحة')
+        return {'analysis': analysis, 'model': used_model}
+
     @app.get('/api/network-config')
     def network_config():
+        gemini_on = bool(get_stored_gemini_key())
         return jsonify(
             {
                 'quality': QUALITY,
@@ -417,6 +547,12 @@ def create_app(settings: Settings | None = None) -> Flask:
                     'phase_max_bytes': 32 * MIB,
                     'target_seconds': 6,
                     'min_phase_seconds': 0.25,
+                },
+                'ai': {
+                    'available': gemini_on,
+                    'reason': None
+                    if gemini_on
+                    else 'المدير لم يحفظ مفتاح Gemini في الخادم بعد',
                 },
                 'carrier': {
                     'available': False,
@@ -1012,11 +1148,16 @@ def create_app(settings: Settings | None = None) -> Flask:
                 )
             else:
                 db.execute("DELETE FROM app_settings WHERE key='gemini_api_key'")
-        return jsonify({'ok': True, 'gemini_api_key_set': bool(key)})
+        return jsonify(
+            {
+                'ok': True,
+                'gemini_api_key_set': bool(key),
+                'scope': 'server_wide',
+                'note': 'المفتاح محفوظ في قاعدة البيانات ويُستخدم لجميع مستخدمي الويب والتطبيق',
+            }
+        )
 
-    @app.post('/api/admin/analyze')
-    def admin_analyze():
-        require_admin(current_user())
+    def _parse_analyze_text():
         body = _json_body()
         text = body.get('text', '')
         if not isinstance(text, str):
@@ -1026,117 +1167,32 @@ def create_app(settings: Settings | None = None) -> Flask:
             raise _ApiError(422, 'اكتب وصفًا للتحليل (3 أحرف على الأقل)')
         if len(text) > 4000:
             raise _ApiError(422, 'نص التحليل طويل جدًا (الحد 4000 حرف)')
-        with database.connect() as db:
-            row = db.execute(
-                "SELECT value FROM app_settings WHERE key='gemini_api_key'"
-            ).fetchone()
-        if not row or not row['value']:
-            raise _ApiError(400, 'احفظ مفتاح Gemini أولًا من تبويب الذكاء والضبط')
-        payload = {
-            'contents': [
-                {
-                    'parts': [
-                        {
-                            'text': 'أنت مساعد تحليل شبكة اتصالات لحائل. أجب بالعربية باختصار ووضوح.\n\n'
-                            + text
-                        }
-                    ]
-                }
-            ]
-        }
-        api_key = row['value']
-        base = 'https://generativelanguage.googleapis.com/v1beta'
+        return text
 
-        def model_id(name: str) -> str:
-            return name.split('/', 1)[-1] if name else ''
+    @app.get('/api/ai/status')
+    def ai_status():
+        current_user()
+        on = bool(get_stored_gemini_key())
+        return jsonify(
+            {
+                'available': on,
+                'reason': None
+                if on
+                else 'المدير لم يحفظ مفتاح Gemini في الخادم بعد',
+            }
+        )
 
-        def preferred_models(available: list[str]) -> list[str]:
-            rank = [
-                'gemini-flash-latest',
-                'gemini-2.5-flash',
-                'gemini-2.5-flash-lite',
-                'gemini-2.0-flash',
-                'gemini-2.0-flash-lite',
-                'gemini-3.8-flash',
-                'gemini-3.6-flash',
-                'gemini-3.5-flash-lite',
-                'gemini-pro-latest',
-            ]
-            ordered = [m for m in rank if m in available]
-            for m in available:
-                if m not in ordered and 'flash' in m and 'image' not in m and 'tts' not in m:
-                    ordered.append(m)
-            for m in available:
-                if m not in ordered and 'gemini' in m and 'embed' not in m:
-                    ordered.append(m)
-            return ordered or list(available)
+    @app.post('/api/ai/analyze')
+    def ai_analyze():
+        """Any signed-in user; uses the admin-stored server key from DB."""
+        current_user()
+        throttle(('ai', request.remote_addr or '0'), 30 if cfg.testing else 12, 3600)
+        return jsonify(run_gemini_analysis(_parse_analyze_text()))
 
-        try:
-            listed = httpx.get(
-                f'{base}/models', params={'key': api_key, 'pageSize': 100}, timeout=30
-            )
-        except httpx.HTTPError:
-            raise _ApiError(502, 'تعذر الاتصال بخدمة Gemini')
-        if listed.status_code >= 400:
-            detail = 'مفتاح Gemini مرفوض أو غير صالح'
-            try:
-                err = listed.json().get('error', {}).get('message')
-                if err:
-                    detail = f'رفض Gemini: {err}'
-            except Exception:
-                pass
-            raise _ApiError(502, detail)
-
-        available = []
-        try:
-            for item in listed.json().get('models', []):
-                methods = item.get('supportedGenerationMethods') or item.get(
-                    'supported_generation_methods'
-                ) or []
-                if 'generateContent' not in methods:
-                    continue
-                mid = model_id(item.get('name', ''))
-                if mid:
-                    available.append(mid)
-        except Exception:
-            available = []
-
-        # Hardcoded fallbacks if listing is empty/unexpected.
-        models = preferred_models(available) or [
-            'gemini-flash-latest',
-            'gemini-2.5-flash',
-            'gemini-2.5-flash-lite',
-            'gemini-2.0-flash',
-        ]
-
-        last_body = None
-        try:
-            for model in models:
-                response = httpx.post(
-                    f'{base}/models/{model}:generateContent',
-                    params={'key': api_key},
-                    json=payload,
-                    timeout=45,
-                )
-                last_body = response
-                if response.status_code < 400:
-                    break
-            else:
-                detail = 'لا يوجد نموذج Gemini متاح لهذا المفتاح'
-                try:
-                    err = last_body.json().get('error', {}).get('message')
-                    if err:
-                        detail = f'رفض Gemini: {err}'
-                except Exception:
-                    pass
-                raise _ApiError(502, detail)
-        except httpx.HTTPError:
-            raise _ApiError(502, 'تعذر الاتصال بخدمة Gemini')
-        try:
-            analysis = last_body.json()['candidates'][0]['content']['parts'][0]['text']
-        except (KeyError, IndexError, TypeError):
-            raise _ApiError(502, 'استجابة Gemini غير صالحة')
-        return jsonify({'analysis': analysis, 'model': model})
+    @app.post('/api/admin/analyze')
+    def admin_analyze():
+        require_admin(current_user())
+        return jsonify(run_gemini_analysis(_parse_analyze_text()))
 
     @app.delete('/api/admin/users/<user_id>')
     def admin_delete_user(user_id):
@@ -1281,6 +1337,17 @@ def create_app(settings: Settings | None = None) -> Flask:
         if not user.get('is_admin'):
             return render_template('admin_denied.html'), 403
         return render_template('admin.html', token=user['_token'], user=user)
+
+    @app.get('/ai')
+    def web_ai():
+        user = current_user(required=False)
+        if not user:
+            return redirect(url_for('web_login', next=url_for('web_ai')))
+        return render_template(
+            'ai.html',
+            token=user['_token'],
+            available=bool(get_stored_gemini_key()),
+        )
 
     return app
 

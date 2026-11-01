@@ -4,6 +4,10 @@ services:
     runtime: docker
     plan: free
     healthCheckPath: /api/network-config
+    disk:
+      name: smartcare-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: SMARTCARE_SPEED_ENABLED
         value: "1"
@@ -19,3 +23,6 @@ services:
         value: "123456"
       - key: SMARTCARE_SECRET
         generateValue: true
+      # اختياري: إن وضعت المفتاح هنا يُزامَن لقاعدة البيانات عند الإقلاع
+      - key: SMARTCARE_GEMINI_API_KEY
+        sync: false
