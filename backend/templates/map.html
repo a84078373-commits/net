@@ -2,11 +2,28 @@
 {% block title %}خريطة الجودة{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  .map-toolbar {
+    display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px;
+  }
+  .map-toolbar button {
+    background: #4f008c; color: #fff; border: 0; border-radius: 8px;
+    padding: 10px 14px; font-weight: 700; cursor: pointer;
+  }
+  .map-toolbar button.ghost { background: #efe6f7; color: #4f008c; }
+</style>
 {% endblock %}
 {% block content %}
 <section class="panel flat">
   <h1>خريطة جودة الشبكة</h1>
-  <p class="muted">خلايا مجمّعة داخل حدود حائل — بدون إحداثيات فردية.</p>
+  <p class="muted">
+    الافتراضي: حدود حائل. يمكنك التحرك لأي مدينة أو دولة، أو استخدام موقعك الحالي للتجربة.
+    خلايا الجودة تُحمَّل حسب المنطقة الظاهرة على الشاشة.
+  </p>
+  <div class="map-toolbar">
+    <button type="button" id="btnHail">العودة لحائل</button>
+    <button type="button" id="btnLocate" class="ghost">موقعي الحالي</button>
+  </div>
   <div id="map" class="map"></div>
   <div id="legend" class="legend"></div>
 </section>
@@ -14,31 +31,77 @@
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const BOUNDS = {{ bounds|tojson }};
+const BOUNDS = {{ bounds|tojson }}; // [west, south, east, north] — Hail default
 const COLORS = {{ colors|tojson }};
 const TOKEN = {{ token|tojson }};
-const map = L.map('map').setView([(BOUNDS[1]+BOUNDS[3])/2, (BOUNDS[0]+BOUNDS[2])/2], 11);
-// Esri streets — free for light use, no API key (OSM.org tiles block many apps with 403).
+const hailCenter = [(BOUNDS[1] + BOUNDS[3]) / 2, (BOUNDS[0] + BOUNDS[2]) / 2];
+const map = L.map('map', { worldCopyJump: true }).setView(hailCenter, 11);
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles &copy; Esri',
   maxZoom: 19
 }).addTo(map);
-map.setMaxBounds([[BOUNDS[1]-0.05, BOUNDS[0]-0.05],[BOUNDS[3]+0.05, BOUNDS[2]+0.05]]);
+
+const hailRect = L.rectangle(
+  [[BOUNDS[1], BOUNDS[0]], [BOUNDS[3], BOUNDS[2]]],
+  { color: '#4f008c', weight: 2, fillOpacity: 0.04, dashArray: '6 4' }
+).bindTooltip('حدود حائل الافتراضية').addTo(map);
+
+const cellsLayer = L.layerGroup().addTo(map);
 const headers = TOKEN ? {'Authorization': 'Bearer ' + TOKEN} : {};
-fetch('/api/network-heatmap', {headers}).then(r => r.json()).then(data => {
-  const legend = document.getElementById('legend');
-  legend.innerHTML = Object.entries(COLORS).map(([k,v]) =>
-    `<span><i style="background:${v}"></i>${k}</span>`).join('');
-  (data.cells || []).forEach(cell => {
-    const b = cell.bounds; // [west,south,east,north]
-    const q = (cell.quality && cell.quality.download) || cell.status || 'insufficient';
-    const color = COLORS[q] || COLORS.insufficient;
-    L.rectangle([[b[1], b[0]],[b[3], b[2]]], {
-      color, weight: 1, fillColor: color, fillOpacity: 0.45
-    }).bindPopup(`${cell.id}<br>الحالة: ${cell.status}<br>عينات: ${cell.sample_count ?? '—'}`).addTo(map);
+let locMarker = null;
+
+function loadCells() {
+  const b = map.getBounds();
+  const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',');
+  const url = '/api/network-heatmap?bbox=' + encodeURIComponent(bbox);
+  fetch(url, {headers}).then(r => r.json()).then(data => {
+    const legend = document.getElementById('legend');
+    legend.innerHTML = Object.entries(COLORS).map(([k,v]) =>
+      `<span><i style="background:${v}"></i>${k}</span>`).join('');
+    cellsLayer.clearLayers();
+    (data.cells || []).forEach(cell => {
+      const cb = cell.bounds;
+      const q = (cell.quality && cell.quality.download) || cell.status || 'insufficient';
+      const color = COLORS[q] || COLORS.insufficient;
+      L.rectangle([[cb[1], cb[0]],[cb[3], cb[2]]], {
+        color, weight: 1, fillColor: color, fillOpacity: 0.45
+      }).bindPopup(`${cell.id}<br>الحالة: ${cell.status}<br>عينات: ${cell.sample_count ?? '—'}`)
+        .addTo(cellsLayer);
+    });
+  }).catch(err => {
+    document.getElementById('legend').textContent = 'تعذر تحميل الخلايا: ' + err;
   });
-}).catch(err => {
-  document.getElementById('legend').textContent = 'تعذر تحميل الخريطة: ' + err;
+}
+
+let moveTimer = null;
+map.on('moveend', () => {
+  clearTimeout(moveTimer);
+  moveTimer = setTimeout(loadCells, 400);
 });
+loadCells();
+
+document.getElementById('btnHail').onclick = () => {
+  map.fitBounds([[BOUNDS[1], BOUNDS[0]], [BOUNDS[3], BOUNDS[2]]], { padding: [24, 24] });
+};
+
+document.getElementById('btnLocate').onclick = () => {
+  if (!navigator.geolocation) {
+    alert('المتصفح لا يدعم تحديد الموقع');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      map.setView([lat, lon], 13);
+      if (locMarker) map.removeLayer(locMarker);
+      locMarker = L.circleMarker([lat, lon], {
+        radius: 8, color: '#ff375e', fillColor: '#ff375e', fillOpacity: 0.85
+      }).bindPopup('موقعك الحالي').addTo(map).openPopup();
+    },
+    () => alert('تعذر الحصول على الموقع؛ اسمح بالإذن من المتصفح'),
+    { enableHighAccuracy: true, timeout: 15000 }
+  );
+};
 </script>
 {% endblock %}

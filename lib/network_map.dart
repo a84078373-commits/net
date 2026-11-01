@@ -168,7 +168,7 @@ class _NetworkMapState extends State<NetworkMap> {
       builder: (c) => AlertDialog(
         title: const Text('العودة إلى موقعي'),
         content: const Text(
-          'سيُطلب إذن الموقع لتحريك الخريطة إلى خلية تقريبية. طلب الخريطة يرسل حدود العرض إلى API، لكنه لا يحفظ قياسًا أو إحداثيات GPS دقيقة.',
+          'سيُطلب إذن الموقع لتحريك الخريطة إلى مكانك الحالي (أي مدينة/دولة). الافتراضي عند الفتح هو حائل. طلب الخريطة يرسل حدود العرض الظاهرة فقط ولا يحفظ GPS دقيقًا من هنا.',
         ),
         actions: [
           TextButton(
@@ -646,8 +646,8 @@ class _NetworkMapState extends State<NetworkMap> {
         options: MapOptions(
           initialCenter: _city,
           initialZoom: 12.3,
-          minZoom: 7,
-          maxZoom: 17,
+          minZoom: 2,
+          maxZoom: 18,
           interactionOptions: const InteractionOptions(
             flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
           ),
@@ -751,7 +751,7 @@ class _NetworkMapState extends State<NetworkMap> {
               'تكبير',
               () => controller.move(
                 controller.camera.center,
-                math.min(17, controller.camera.zoom + .7),
+                math.min(18, controller.camera.zoom + .7),
               ),
             ),
             tool(
@@ -759,10 +759,18 @@ class _NetworkMapState extends State<NetworkMap> {
               'تصغير',
               () => controller.move(
                 controller.camera.center,
-                math.max(7, controller.camera.zoom - .7),
+                math.max(2, controller.camera.zoom - .7),
               ),
             ),
-            tool(Icons.my_location, 'العودة إلى موقعي', locate),
+            tool(
+              Icons.home_outlined,
+              'العودة لحائل',
+              () {
+                controller.move(_city, 12.3);
+                refresh();
+              },
+            ),
+            tool(Icons.my_location, 'موقعي الحالي', locate),
             tool(
               dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
               'تبديل مظهر الخريطة',

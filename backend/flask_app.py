@@ -881,9 +881,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         if share_location:
             if latitude is None or longitude is None or location_accuracy_m is None:
                 raise _ApiError(422, 'مشاركة الخريطة تحتاج موافقة وموقعًا ودقة معلومين')
-            west, south, east, north = QUALITY['bounds']
-            if not (south <= latitude <= north and west <= longitude <= east):
-                raise _ApiError(422, 'الموقع خارج نطاق حائل المدعوم حاليًا')
+            # Worldwide cells allowed for testing; Hail remains the default map view only.
             if location_accuracy_m > 1000:
                 raise _ApiError(
                     422, 'دقة الموقع غير كافية لتصنيف خلية؛ يمكنك الحفظ دون مشاركة'
