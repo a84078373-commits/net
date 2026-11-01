@@ -37,27 +37,48 @@ L.rectangle(
 ).bindTooltip('حدود حائل الافتراضية').addTo(map);
 
 const cellsLayer = L.layerGroup().addTo(map);
+const mineLayer = L.layerGroup().addTo(map);
 const headers = TOKEN ? {'Authorization': 'Bearer ' + TOKEN} : {};
 let locMarker = null;
+
+function drawCell(cell, opts) {
+  const cb = cell.bounds;
+  const q = (cell.quality && cell.quality.download) || cell.status || 'insufficient';
+  const color = opts.color || COLORS[q] || COLORS.insufficient;
+  return L.rectangle([[cb[1], cb[0]],[cb[3], cb[2]]], {
+    color, weight: opts.weight || 1, fillColor: color, fillOpacity: opts.fillOpacity || 0.45
+  }).bindPopup(
+    `${cell.id}<br>الحالة: ${cell.status}<br>عينات: ${cell.sample_count ?? '—'}` +
+    (opts.mine ? '<br><strong>قياسك الشخصي</strong>' : '')
+  );
+}
 
 function loadCells() {
   const b = map.getBounds();
   const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',');
   const url = '/api/network-heatmap?bbox=' + encodeURIComponent(bbox);
-  fetch(url, {headers}).then(r => r.json()).then(data => {
+  const publicP = fetch(url, {headers}).then(r => r.json());
+  const mineP = TOKEN
+    ? fetch('/api/network-heatmap/mine', {headers}).then(r => r.ok ? r.json() : {cells: []}).catch(() => ({cells: []}))
+    : Promise.resolve({cells: []});
+
+  Promise.all([publicP, mineP]).then(([data, mine]) => {
     const legend = document.getElementById('legend');
     legend.innerHTML = Object.entries(COLORS).map(([k,v]) =>
-      `<span><i style="background:${v}"></i>${k}</span>`).join('');
+      `<span><i style="background:${v}"></i>${k}</span>`).join('') +
+      '<span><i style="background:#ff375e"></i>قياساتك</span>';
     cellsLayer.clearLayers();
+    mineLayer.clearLayers();
     (data.cells || []).forEach(cell => {
-      const cb = cell.bounds;
-      const q = (cell.quality && cell.quality.download) || cell.status || 'insufficient';
-      const color = COLORS[q] || COLORS.insufficient;
-      L.rectangle([[cb[1], cb[0]],[cb[3], cb[2]]], {
-        color, weight: 1, fillColor: color, fillOpacity: 0.45
-      }).bindPopup(`${cell.id}<br>الحالة: ${cell.status}<br>عينات: ${cell.sample_count ?? '—'}`)
-        .addTo(cellsLayer);
+      drawCell(cell, {}).addTo(cellsLayer);
     });
+    // Personal measurements always visible to the owner (even with 1 sample).
+    (mine.cells || []).forEach(cell => {
+      drawCell(cell, {color: '#ff375e', weight: 2, fillOpacity: 0.35, mine: true}).addTo(mineLayer);
+    });
+    if (!(data.cells || []).length && !(mine.cells || []).length) {
+      legend.innerHTML += '<br><span>لا خلايا في هذه المنطقة بعد — نفّذ فحص سرعة مع مشاركة الموقع.</span>';
+    }
   }).catch(err => {
     document.getElementById('legend').textContent = 'تعذر تحميل الخلايا: ' + err;
   });

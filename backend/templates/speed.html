@@ -3,18 +3,28 @@
 {% block content %}
 <section class="panel" aria-labelledby="speed-title">
   <h1 id="speed-title">فحص سرعة الشبكة</h1>
-  <p class="muted">قياس حقيقي عبر خادم Render — بدون نتائج وهمية.</p>
+  <p class="muted">قياس حقيقي عبر الخادم — بعد الانتهاء يُحفظ على الخريطة (إن سمحت بالموقع) ويُحلَّل بالذكاء الاصطناعي.</p>
   {% if not available %}
     <div class="alert" role="alert">اختبار الإنترنت غير متاح حاليًا على الخادم.</div>
   {% else %}
+    <label class="row" style="margin-top:1rem;font-weight:700;gap:0.55rem;align-items:center">
+      <input type="checkbox" id="shareLoc" checked style="width:1.15rem;height:1.15rem;min-height:auto">
+      مشاركة الموقع لرسم القياس على الخريطة
+    </label>
     <div class="row" style="margin-top:1rem">
       <button type="button" id="run" class="primary">بدء الفحص</button>
+      <a class="ghost" href="{{ url_for('web_map') }}">فتح الخريطة</a>
     </div>
     <p id="status" class="muted status-line" role="status" aria-live="polite">جاهز</p>
     <div class="metrics" hidden id="metrics" aria-live="polite">
       <div><span id="dl">—</span><small>تحميل Mbps</small></div>
       <div><span id="ul">—</span><small>رفع Mbps</small></div>
       <div><span id="pg">—</span><small>بنق ms</small></div>
+    </div>
+    <div id="saveInfo" class="muted" style="margin-top:0.75rem" hidden></div>
+    <div id="aiBox" hidden style="margin-top:1rem">
+      <h2 class="section-title">تحليل الذكاء الاصطناعي</h2>
+      <pre id="aiOut" class="box" aria-live="polite"></pre>
     </div>
   {% endif %}
 </section>
@@ -24,6 +34,7 @@
 <script>
 const TOKEN = {{ token|tojson }};
 const MIB = 1024 * 1024;
+
 async function api(path, opts = {}) {
   const headers = Object.assign({'Authorization': 'Bearer ' + TOKEN}, opts.headers || {});
   const res = await fetch(path, Object.assign({}, opts, {headers}));
@@ -37,14 +48,37 @@ async function api(path, opts = {}) {
   if (ct.includes('application/json')) return res.json();
   return res.arrayBuffer();
 }
+
+function getPosition() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy: pos.coords.accuracy || 50
+      }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+    );
+  });
+}
+
 document.getElementById('run').onclick = async () => {
   const btn = document.getElementById('run');
   const status = document.getElementById('status');
   const metrics = document.getElementById('metrics');
+  const saveInfo = document.getElementById('saveInfo');
+  const aiBox = document.getElementById('aiBox');
+  const aiOut = document.getElementById('aiOut');
+  const wantShare = document.getElementById('shareLoc').checked;
   if (btn.disabled) return;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> جارٍ الفحص…';
   status.textContent = 'بدء الجلسة…';
+  saveInfo.hidden = true;
+  aiBox.hidden = true;
+  aiOut.textContent = '';
   try {
     const session = await api('/api/speed/sessions', {method: 'POST'});
     const sid = session.session_id;
@@ -81,30 +115,87 @@ document.getElementById('run').onclick = async () => {
     const uSec = (performance.now() - u0) / 1000;
     const download = downBytes * 8 / dSec / 1e6;
     const upload = upBytes * 8 / uSec / 1e6;
-    await api('/api/network-tests', {
+
+    let loc = null;
+    if (wantShare) {
+      status.textContent = 'تحديد الموقع للخريطة…';
+      loc = await getPosition();
+    }
+
+    const body = {
+      session_id: sid,
+      download_mbps: download,
+      upload_mbps: upload,
+      ping_ms: ping,
+      download_seconds: dSec,
+      upload_seconds: uSec,
+      download_bytes: downBytes,
+      upload_bytes: upBytes,
+      connection_type: 'unknown',
+      connection_source: 'unavailable',
+      share_location: false,
+      measurement_time: Date.now() / 1000,
+      test_status: 'completed'
+    };
+    if (loc && loc.accuracy <= 1000) {
+      body.share_location = true;
+      body.latitude = loc.latitude;
+      body.longitude = loc.longitude;
+      body.location_accuracy_m = Math.max(1, loc.accuracy);
+    }
+
+    status.textContent = 'حفظ النتيجة…';
+    const saved = await api('/api/network-tests', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        session_id: sid,
-        download_mbps: download,
-        upload_mbps: upload,
-        ping_ms: ping,
-        download_seconds: dSec,
-        upload_seconds: uSec,
-        download_bytes: downBytes,
-        upload_bytes: upBytes,
-        connection_type: 'unknown',
-        connection_source: 'unavailable',
-        share_location: false,
-        measurement_time: Date.now() / 1000,
-        test_status: 'completed'
-      })
+      body: JSON.stringify(body)
     });
+
     metrics.hidden = false;
     document.getElementById('dl').textContent = download.toFixed(1);
     document.getElementById('ul').textContent = upload.toFixed(1);
     document.getElementById('pg').textContent = ping.toFixed(0);
-    status.textContent = 'تم الحفظ على الخادم';
+
+    saveInfo.hidden = false;
+    if (saved.shared) {
+      saveInfo.textContent = 'تم الرسم على الخريطة (خلية ' + (saved.cell_id || '') + '). افتح الخريطة لرؤيته في طبقة قياساتك.';
+      status.textContent = 'تم الحفظ على الخادم ورُسم على الخريطة';
+    } else if (wantShare && !loc) {
+      saveInfo.textContent = 'تم الحفظ بدون موقع — اسمح بإذن الموقع ثم أعد الفحص للرسم على الخريطة.';
+      status.textContent = 'تم الحفظ بدون موقع';
+    } else if (wantShare && loc && loc.accuracy > 1000) {
+      saveInfo.textContent = 'دقة الموقع ضعيفة فلم يُرسم على الخريطة، لكن القياس محفوظ.';
+      status.textContent = 'تم الحفظ (بدون خلية)';
+    } else {
+      saveInfo.textContent = 'تم الحفظ بدون مشاركة موقع. فعّل الخيار أعلاه للرسم على الخريطة.';
+      status.textContent = 'تم الحفظ على الخادم';
+    }
+
+    // AI analysis using server-stored Gemini key
+    status.textContent = (status.textContent || '') + ' • جارٍ التحليل الذكي…';
+    aiBox.hidden = false;
+    aiOut.textContent = 'جارٍ التحليل…';
+    try {
+      const prompt =
+        'حلّل نتيجة فحص سرعة شبكة للمستخدم في حائل/الموقع الحالي:\n' +
+        '- التحميل: ' + download.toFixed(1) + ' Mbps\n' +
+        '- الرفع: ' + upload.toFixed(1) + ' Mbps\n' +
+        '- البنق: ' + ping.toFixed(0) + ' ms\n' +
+        (saved.shared ? ('- رُسم على خلية: ' + saved.cell_id + '\n') : '- لم تُشارك إحداثيات على الخريطة\n') +
+        'اذكر تقييمًا مختصرًا وجودة الاستخدام اليومي ونصيحة واحدة عملية.';
+      const ai = await api('/api/ai/analyze', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: prompt})
+      });
+      aiOut.textContent = ai.analysis || 'لا توجد نتيجة';
+      status.textContent = saved.shared
+        ? 'اكتمل: حفظ + خريطة + تحليل ذكي'
+        : 'اكتمل: حفظ + تحليل ذكي';
+    } catch (aiErr) {
+      aiOut.textContent = 'تعذر التحليل الذكي: ' + (aiErr.message || aiErr) +
+        '\n(تأكد أن المدير حفظ مفتاح Gemini في لوحة الإدارة)';
+    }
   } catch (e) {
     status.textContent = e.message || String(e);
   } finally {
