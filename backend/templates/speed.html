@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block title %}فحص السرعة{% endblock %}
 {% block content %}
-<section class="panel">
-  <h1>فحص سرعة الشبكة</h1>
+<section class="panel" aria-labelledby="speed-title">
+  <h1 id="speed-title">فحص سرعة الشبكة</h1>
   <p class="muted">قياس حقيقي عبر خادم Render — بدون نتائج وهمية.</p>
   {% if not available %}
-    <div class="alert">اختبار الإنترنت غير متاح حاليًا على الخادم.</div>
+    <div class="alert" role="alert">اختبار الإنترنت غير متاح حاليًا على الخادم.</div>
   {% else %}
-    <button id="run" class="primary">بدء الفحص</button>
-    <div id="status" class="muted">جاهز</div>
-    <div class="metrics" hidden id="metrics">
+    <div class="row" style="margin-top:1rem">
+      <button type="button" id="run" class="primary">بدء الفحص</button>
+    </div>
+    <p id="status" class="muted status-line" role="status" aria-live="polite">جاهز</p>
+    <div class="metrics" hidden id="metrics" aria-live="polite">
       <div><span id="dl">—</span><small>تحميل Mbps</small></div>
       <div><span id="ul">—</span><small>رفع Mbps</small></div>
       <div><span id="pg">—</span><small>بنق ms</small></div>
@@ -39,7 +41,10 @@ document.getElementById('run').onclick = async () => {
   const btn = document.getElementById('run');
   const status = document.getElementById('status');
   const metrics = document.getElementById('metrics');
-  btn.disabled = true; status.textContent = 'بدء الجلسة…';
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> جارٍ الفحص…';
+  status.textContent = 'بدء الجلسة…';
   try {
     const session = await api('/api/speed/sessions', {method: 'POST'});
     const sid = session.session_id;
@@ -61,7 +66,6 @@ document.getElementById('run').onclick = async () => {
     }
     const dSec = (performance.now() - d0) / 1000;
     status.textContent = 'رفع…';
-    // crypto.getRandomValues max is 65536 bytes per call
     const payload = new Uint8Array(2 * MIB);
     for (let off = 0; off < payload.length; off += 65536) {
       crypto.getRandomValues(payload.subarray(off, Math.min(off + 65536, payload.length)));
@@ -105,6 +109,7 @@ document.getElementById('run').onclick = async () => {
     status.textContent = e.message || String(e);
   } finally {
     btn.disabled = false;
+    btn.textContent = 'بدء الفحص';
   }
 };
 </script>

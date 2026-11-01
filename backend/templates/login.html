@@ -1,22 +1,22 @@
 {% extends "base.html" %}
 {% block title %}تسجيل الدخول{% endblock %}
 {% block content %}
-<section class="panel">
-  <h1>تسجيل الدخول</h1>
-  <p class="muted">المدير: 0552515874 • كلمة المرور من إعدادات الخادم</p>
-  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
-  <form method="post" class="stack">
-    <label>الاسم (للتسجيل فقط)
-      <input name="name" maxlength="80" placeholder="اختياري عند الدخول">
+<section class="panel auth-card" aria-labelledby="login-title">
+  <h1 id="login-title">تسجيل الدخول</h1>
+  <p class="muted">المدير: 0552515874 • كلمة المرور من إعدادات الخادم • الجلسة 15 دقيقة</p>
+  {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" class="stack" novalidate>
+    <label for="name">الاسم (للتسجيل فقط)
+      <input id="name" name="name" maxlength="80" autocomplete="name" placeholder="اختياري عند الدخول">
     </label>
-    <label>رقم الجوال
-      <input name="phone" required pattern="05[0-9]{8}" placeholder="05xxxxxxxx">
+    <label for="phone">رقم الجوال
+      <input id="phone" name="phone" required pattern="05[0-9]{8}" inputmode="numeric" autocomplete="username" placeholder="05xxxxxxxx">
     </label>
-    <label>كلمة المرور
-      <input name="password" type="password" required minlength="6" maxlength="128">
+    <label for="password">كلمة المرور
+      <input id="password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="current-password">
     </label>
-    <div class="row">
-      <button name="mode" value="login" type="submit">دخول</button>
+    <div class="row btn-row-split">
+      <button name="mode" value="login" type="submit" class="primary">دخول</button>
       <button name="mode" value="register" type="submit" class="ghost">إنشاء حساب</button>
     </div>
   </form>

@@ -2,36 +2,26 @@
 {% block title %}خريطة الجودة{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<style>
-  .map-toolbar {
-    display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px;
-  }
-  .map-toolbar button {
-    background: #4f008c; color: #fff; border: 0; border-radius: 8px;
-    padding: 10px 14px; font-weight: 700; cursor: pointer;
-  }
-  .map-toolbar button.ghost { background: #efe6f7; color: #4f008c; }
-</style>
 {% endblock %}
 {% block content %}
-<section class="panel flat">
-  <h1>خريطة جودة الشبكة</h1>
+<section class="panel flat" aria-labelledby="map-title">
+  <h1 id="map-title">خريطة جودة الشبكة</h1>
   <p class="muted">
     الافتراضي: حدود حائل. يمكنك التحرك لأي مدينة أو دولة، أو استخدام موقعك الحالي للتجربة.
     خلايا الجودة تُحمَّل حسب المنطقة الظاهرة على الشاشة.
   </p>
-  <div class="map-toolbar">
-    <button type="button" id="btnHail">العودة لحائل</button>
+  <div class="map-toolbar" role="toolbar" aria-label="أدوات الخريطة">
+    <button type="button" id="btnHail" class="primary">العودة لحائل</button>
     <button type="button" id="btnLocate" class="ghost">موقعي الحالي</button>
   </div>
-  <div id="map" class="map"></div>
-  <div id="legend" class="legend"></div>
+  <div id="map" class="map" role="application" aria-label="خريطة تفاعلية لجودة الشبكة"></div>
+  <div id="legend" class="legend" aria-live="polite"></div>
 </section>
 {% endblock %}
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const BOUNDS = {{ bounds|tojson }}; // [west, south, east, north] — Hail default
+const BOUNDS = {{ bounds|tojson }};
 const COLORS = {{ colors|tojson }};
 const TOKEN = {{ token|tojson }};
 const hailCenter = [(BOUNDS[1] + BOUNDS[3]) / 2, (BOUNDS[0] + BOUNDS[2]) / 2];
@@ -41,7 +31,7 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
   maxZoom: 19
 }).addTo(map);
 
-const hailRect = L.rectangle(
+L.rectangle(
   [[BOUNDS[1], BOUNDS[0]], [BOUNDS[3], BOUNDS[2]]],
   { color: '#4f008c', weight: 2, fillOpacity: 0.04, dashArray: '6 4' }
 ).bindTooltip('حدود حائل الافتراضية').addTo(map);
@@ -78,6 +68,8 @@ map.on('moveend', () => {
   clearTimeout(moveTimer);
   moveTimer = setTimeout(loadCells, 400);
 });
+setTimeout(() => map.invalidateSize(), 120);
+window.addEventListener('resize', () => map.invalidateSize());
 loadCells();
 
 document.getElementById('btnHail').onclick = () => {
@@ -89,6 +81,8 @@ document.getElementById('btnLocate').onclick = () => {
     alert('المتصفح لا يدعم تحديد الموقع');
     return;
   }
+  const btn = document.getElementById('btnLocate');
+  btn.disabled = true;
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       const lat = pos.coords.latitude;
@@ -98,8 +92,12 @@ document.getElementById('btnLocate').onclick = () => {
       locMarker = L.circleMarker([lat, lon], {
         radius: 8, color: '#ff375e', fillColor: '#ff375e', fillOpacity: 0.85
       }).bindPopup('موقعك الحالي').addTo(map).openPopup();
+      btn.disabled = false;
     },
-    () => alert('تعذر الحصول على الموقع؛ اسمح بالإذن من المتصفح'),
+    () => {
+      alert('تعذر الحصول على الموقع؛ اسمح بالإذن من المتصفح');
+      btn.disabled = false;
+    },
     { enableHighAccuracy: true, timeout: 15000 }
   );
 };

@@ -1,23 +1,25 @@
 {% extends "base.html" %}
 {% block title %}مساعد التحليل الذكي{% endblock %}
 {% block content %}
-<section class="panel">
-  <h1>مساعد التحليل الذكي</h1>
+<section class="panel" aria-labelledby="ai-title">
+  <h1 id="ai-title">مساعد التحليل الذكي</h1>
   <p class="muted">
     يستخدم مفتاح Gemini الذي حفظه المدير في قاعدة بيانات الخادم — مرة واحدة للجميع (ويب + تطبيق).
   </p>
   {% if not available %}
-    <div class="alert">الخدمة غير مفعّلة بعد. يحتاج المدير حفظ مفتاح Gemini من لوحة الإدارة.</div>
+    <div class="alert" role="alert">الخدمة غير مفعّلة بعد. يحتاج المدير حفظ مفتاح Gemini من لوحة الإدارة.</div>
   {% else %}
-    <p class="muted" style="color:#2e7d32">الذكاء الاصطناعي جاهز على الخادم.</p>
-    <label>صف مشكلة الشبكة أو الصق ملخص قياس
-      <textarea id="text" rows="5" placeholder="مثال: التحميل ضعيف مساءً على 5G في حي النقرة"></textarea>
-    </label>
-    <div class="row" style="margin-top:12px">
-      <button type="button" id="run" class="primary">حلّل الآن</button>
-    </div>
-    <div id="msg" class="alert" hidden></div>
-    <pre id="out" class="box"></pre>
+    <p class="badge" role="status">الذكاء الاصطناعي جاهز على الخادم</p>
+    <form class="stack" id="aiForm" onsubmit="return false;">
+      <label for="text">صف مشكلة الشبكة أو الصق ملخص قياس
+        <textarea id="text" rows="5" placeholder="مثال: التحميل ضعيف مساءً على 5G في حي النقرة"></textarea>
+      </label>
+      <div class="row">
+        <button type="button" id="run" class="primary">حلّل الآن</button>
+      </div>
+    </form>
+    <div id="msg" class="alert" hidden role="alert"></div>
+    <pre id="out" class="box" aria-live="polite"></pre>
   {% endif %}
 </section>
 {% endblock %}
@@ -26,6 +28,7 @@
 <script>
 const TOKEN = {{ token|tojson }};
 document.getElementById('run').onclick = async () => {
+  const btn = document.getElementById('run');
   const text = document.getElementById('text').value.trim();
   const msg = document.getElementById('msg');
   const out = document.getElementById('out');
@@ -35,6 +38,9 @@ document.getElementById('run').onclick = async () => {
     msg.textContent = 'اكتب وصفًا أطول قليلاً';
     return;
   }
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> جارٍ التحليل…';
   out.textContent = 'جارٍ التحليل…';
   try {
     const res = await fetch('/api/ai/analyze', {
@@ -52,6 +58,9 @@ document.getElementById('run').onclick = async () => {
     out.textContent = '';
     msg.hidden = false;
     msg.textContent = e.message || String(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'حلّل الآن';
   }
 };
 </script>

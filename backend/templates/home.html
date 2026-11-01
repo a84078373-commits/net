@@ -1,42 +1,45 @@
 {% extends "base.html" %}
 {% block title %}مرحبا بكم في stc • SmartCare{% endblock %}
 {% block content %}
-<section class="hero">
-  <h1>مرحبا بكم في stc</h1>
-  <p>قياس سرعة الشبكة وخريطة جودة التغطية لحائل — نفس الخدمة التي يستخدمها التطبيق.</p>
-  <form class="search" action="{{ url_for('web_speed') }}" method="get">
-    <input type="search" placeholder="ما الذي تبحث عنه؟" readonly>
-    <button type="submit" aria-label="بحث">🔍</button>
-  </form>
-</section>
+<div class="page-stack">
+  <section class="hero" aria-labelledby="hero-title">
+    <h1 id="hero-title">مرحبا بكم في stc</h1>
+    <p>قياس سرعة الشبكة وخريطة جودة التغطية لحائل — نفس الخدمة التي يستخدمها التطبيق.</p>
+    <form class="search" action="{{ url_for('web_speed') }}" method="get" role="search">
+      <label class="visually-hidden" for="q" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">بحث</label>
+      <input id="q" type="search" name="q" placeholder="ما الذي تبحث عنه؟" readonly aria-readonly="true">
+      <button type="submit" aria-label="الانتقال لفحص السرعة">بحث</button>
+    </form>
+  </section>
 
-<section>
-  <h2 class="section-title">استكشف منتجاتنا</h2>
-  <div class="cards-2">
-    <article class="shot dark">
-      <h3>حول رقمك إلى stc</h3>
-    </article>
-    <article class="shot purple">
-      <h3>شريحة جوال وإنترنت</h3>
-    </article>
-  </div>
-</section>
+  <section aria-labelledby="products-title">
+    <h2 class="section-title" id="products-title">استكشف منتجاتنا</h2>
+    <div class="cards-2">
+      <article class="shot dark">
+        <h3>حول رقمك إلى stc</h3>
+      </article>
+      <article class="shot purple">
+        <h3>شريحة جوال وإنترنت</h3>
+      </article>
+    </div>
+  </section>
 
-<section>
-  <h2 class="section-title">انضم إلى stc</h2>
-  <a class="join" href="{{ url_for('web_speed') }}">الإنترنت المنزلي / ابدأ فحص السرعة</a>
-</section>
+  <section aria-labelledby="join-title">
+    <h2 class="section-title" id="join-title">انضم إلى stc</h2>
+    <a class="join" href="{{ url_for('web_speed') }}">الإنترنت المنزلي / ابدأ فحص السرعة</a>
+  </section>
 
-<section>
-  <h2 class="section-title">إجراءات سريعة</h2>
-  <div class="actions">
-    <a href="{{ url_for('web_speed') }}"><strong>فحص السرعة</strong><span>قياس فعلي</span></a>
-    <a href="{{ url_for('web_map') }}"><strong>خريطة الجودة</strong><span>خلايا حائل</span></a>
-    <a href="{{ url_for('web_ai') }}"><strong>الذكاء</strong><span>تحليل Gemini</span></a>
-    <a href="{{ url_for('web_login') }}"><strong>الحساب</strong><span>دخول / تسجيل</span></a>
-    {% if is_admin %}
-    <a href="{{ url_for('web_admin') }}"><strong>لوحة المدير</strong><span>تحكم كامل</span></a>
-    {% endif %}
-  </div>
-</section>
+  <section aria-labelledby="actions-title">
+    <h2 class="section-title" id="actions-title">إجراءات سريعة</h2>
+    <div class="actions">
+      <a href="{{ url_for('web_speed') }}"><strong>فحص السرعة</strong><span>قياس فعلي</span></a>
+      <a href="{{ url_for('web_map') }}"><strong>خريطة الجودة</strong><span>خلايا حائل</span></a>
+      <a href="{{ url_for('web_ai') }}"><strong>الذكاء</strong><span>تحليل Gemini</span></a>
+      <a href="{{ url_for('web_login') }}"><strong>الحساب</strong><span>دخول / تسجيل</span></a>
+      {% if is_admin %}
+      <a href="{{ url_for('web_admin') }}"><strong>لوحة المدير</strong><span>تحكم كامل</span></a>
+      {% endif %}
+    </div>
+  </section>
+</div>
 {% endblock %}

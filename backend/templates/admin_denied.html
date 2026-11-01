@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}غير مصرح{% endblock %}
 {% block content %}
-<section class="panel">
-  <h1>لوحة المدير للمسؤولين فقط</h1>
+<section class="panel auth-card" aria-labelledby="denied-title">
+  <h1 id="denied-title">لوحة المدير للمسؤولين فقط</h1>
   <p class="muted">سجّل الدخول بحساب المدير 0552515874.</p>
-  <a class="primary" href="{{ url_for('web_login', next=url_for('web_admin')) }}">تسجيل دخول المدير</a>
+  <div class="row" style="margin-top:1rem">
+    <a class="primary btn-block" href="{{ url_for('web_login', next=url_for('web_admin')) }}">تسجيل دخول المدير</a>
+  </div>
 </section>
 {% endblock %}

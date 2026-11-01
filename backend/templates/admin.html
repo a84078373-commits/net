@@ -1,35 +1,43 @@
 {% extends "base.html" %}
 {% block title %}لوحة تحكم المدير{% endblock %}
 {% block content %}
-<section class="panel">
-  <h1>لوحة تحكم المدير</h1>
+<section class="panel" aria-labelledby="admin-title">
+  <h1 id="admin-title">لوحة تحكم المدير</h1>
   <p class="muted">{{ user.name }} • {{ user.phone }}</p>
-  <div class="tabs">
-    <button class="tab active" data-tab="overview">نظرة عامة</button>
-    <button class="tab" data-tab="users">المستخدمون</button>
-    <button class="tab" data-tab="measurements">القياسات</button>
-    <button class="tab" data-tab="ai">الذكاء والضبط</button>
+  <div class="tabs" role="tablist" aria-label="أقسام لوحة المدير">
+    <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="overview">نظرة عامة</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="users">المستخدمون</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="measurements">القياسات</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="ai">الذكاء والضبط</button>
   </div>
-  <div id="msg" class="alert" hidden></div>
-  <div id="overview" class="tabpane active"></div>
-  <div id="users" class="tabpane"></div>
-  <div id="measurements" class="tabpane"></div>
-  <div id="ai" class="tabpane">
+  <div id="msg" class="alert" hidden role="alert"></div>
+  <div id="overview" class="tabpane active" role="tabpanel"></div>
+  <div id="users" class="tabpane" role="tabpanel"></div>
+  <div id="measurements" class="tabpane" role="tabpanel"></div>
+  <div id="ai" class="tabpane" role="tabpanel">
     <p class="muted">
       احفظ مفتاح Gemini <strong>مرة واحدة</strong> هنا. يُخزَّن في قاعدة بيانات الخادم ويُستخدم تلقائيًا
       لكل المستخدمين في الويب والتطبيق عبر صفحة/شاشة الذكاء — بدون إعادة إدخال.
     </p>
-    <label>مفتاح Gemini (للخادم بالكامل)
-      <input id="gemini" type="password" placeholder="الصق المفتاح ثم احفظ مرة واحدة">
-    </label>
-    <button type="button" id="saveKey" class="primary">حفظ في قاعدة البيانات</button>
-    <p id="keyStatus" class="muted"></p>
-    <hr style="border:0;border-top:1px solid #e6e6e6;margin:18px 0">
-    <label>تجربة تحليل (نفس المفتاح المحفوظ للجميع)
-      <textarea id="analyzeText" rows="4" placeholder="صف مشكلة شبكة مثل: ضعف التحميل مساءً في وسط حائل"></textarea>
-    </label>
-    <button type="button" id="runAnalyze" class="primary">حلّل الآن</button>
-    <pre id="analysis" class="box"></pre>
+    <div class="stack">
+      <label for="gemini">مفتاح Gemini (للخادم بالكامل)
+        <input id="gemini" type="password" autocomplete="off" placeholder="الصق المفتاح ثم احفظ مرة واحدة">
+      </label>
+      <div class="row">
+        <button type="button" id="saveKey" class="primary">حفظ في قاعدة البيانات</button>
+      </div>
+      <p id="keyStatus" class="muted"></p>
+    </div>
+    <hr class="divider">
+    <div class="stack">
+      <label for="analyzeText">تجربة تحليل (نفس المفتاح المحفوظ للجميع)
+        <textarea id="analyzeText" rows="4" placeholder="صف مشكلة شبكة مثل: ضعف التحميل مساءً في وسط حائل"></textarea>
+      </label>
+      <div class="row">
+        <button type="button" id="runAnalyze" class="primary">حلّل الآن</button>
+      </div>
+      <pre id="analysis" class="box" aria-live="polite"></pre>
+    </div>
   </div>
 </section>
 {% endblock %}
@@ -57,9 +65,13 @@ function show(err) {
   m.textContent = err || '';
 }
 document.querySelectorAll('.tab').forEach(btn => btn.onclick = () => {
-  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => {
+    b.classList.remove('active');
+    b.setAttribute('aria-selected', 'false');
+  });
   document.querySelectorAll('.tabpane').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
+  btn.setAttribute('aria-selected', 'true');
   document.getElementById(btn.dataset.tab).classList.add('active');
 });
 async function reload() {
@@ -77,9 +89,11 @@ async function reload() {
         <div><span>${o.measurements}</span><small>قياسات</small></div>
         <div><span>${o.shared_measurements}</span><small>على الخريطة</small></div>
       </div>
-      <p class="muted">متوسط ↓ ${(o.avg_download_mbps??0).toFixed?.(1) ?? '—'} • ↑ ${(o.avg_upload_mbps??0).toFixed?.(1) ?? '—'} • بنق ${(o.avg_ping_ms??0).toFixed?.(0) ?? '—'}</p>
-      <p class="muted">Gemini: ${o.gemini_configured?'مضبوط':'غير مضبوط'} • Speed: ${o.speed_enabled?'مفعّل':'متوقف'}</p>
-      <p class="muted">Origin: ${o.public_origin||'—'}</p>`;
+      <div class="stack-tight" style="margin-top:1rem">
+        <p class="muted">متوسط ↓ ${(o.avg_download_mbps??0).toFixed?.(1) ?? '—'} • ↑ ${(o.avg_upload_mbps??0).toFixed?.(1) ?? '—'} • بنق ${(o.avg_ping_ms??0).toFixed?.(0) ?? '—'}</p>
+        <p class="muted">Gemini: ${o.gemini_configured?'مضبوط':'غير مضبوط'} • Speed: ${o.speed_enabled?'مفعّل':'متوقف'}</p>
+        <p class="muted">Origin: ${o.public_origin||'—'}</p>
+      </div>`;
     document.getElementById('users').innerHTML = `<p class="muted">${u.count ?? (u.items||[]).length} حساب محفوظ في قاعدة البيانات • الجلسة 15 دقيقة</p>` + ((u.items||[]).map(x => {
       const created = x.created_at_iso ? new Date(x.created_at_iso).toLocaleString('ar-SA') : '—';
       return `
@@ -107,8 +121,11 @@ async function reload() {
   } catch (e) { show(e.message); }
 }
 document.getElementById('saveKey').onclick = async () => {
+  const btn = document.getElementById('saveKey');
   const key = document.getElementById('gemini').value.trim();
   if (!key) { show('الصق مفتاح Gemini ثم احفظ'); return; }
+  if (btn.disabled) return;
+  btn.disabled = true;
   try {
     await api('/api/admin/settings', {
       method: 'PUT',
@@ -119,13 +136,17 @@ document.getElementById('saveKey').onclick = async () => {
     show('');
     alert('تم حفظ مفتاح Gemini');
   } catch(e){ show(e.message); }
+  finally { btn.disabled = false; }
 };
 document.getElementById('runAnalyze').onclick = async () => {
+  const btn = document.getElementById('runAnalyze');
   const text = document.getElementById('analyzeText').value.trim();
   if (text.length < 3) {
     show('اكتب نص التحليل أولًا (مثال: ضعف التحميل في حي النقرة)');
     return;
   }
+  if (btn.disabled) return;
+  btn.disabled = true;
   try {
     show('');
     document.getElementById('analysis').textContent = 'جارٍ التحليل…';
@@ -137,6 +158,8 @@ document.getElementById('runAnalyze').onclick = async () => {
   } catch(e){
     document.getElementById('analysis').textContent = '';
     show(e.message);
+  } finally {
+    btn.disabled = false;
   }
 };
 reload();
