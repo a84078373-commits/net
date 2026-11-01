@@ -124,12 +124,23 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
       ApproximateLocation? location;
       var shareThisRun = share;
       if (shareThisRun) {
-        setState(() => phase = 'بانتظار إذن الموقع');
+        setState(() => phase = 'تحديد موقع أدق للخريطة…');
         try {
           location = await LocationService().locate();
+          if (location.accuracy > LocationService.maxShareAccuracyM) {
+            shareThisRun = false;
+            location = null;
+            if (mounted) {
+              setState(
+                () => error =
+                    'دقة الموقع غير كافية للمشاركة • سيُحفظ القياس دون رسم على الخريطة',
+              );
+            }
+          }
         } on NetworkFailure catch (e) {
           // Speed measurement must still run; map share is optional.
           shareThisRun = false;
+          location = null;
           if (mounted) {
             setState(() => error = '${e.message} • سيُحفظ القياس دون رسم على الخريطة');
           }

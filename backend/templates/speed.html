@@ -137,7 +137,7 @@ document.getElementById('run').onclick = async () => {
       measurement_time: Date.now() / 1000,
       test_status: 'completed'
     };
-    if (loc && loc.accuracy <= 1000) {
+    if (loc && loc.accuracy <= 2000) {
       body.share_location = true;
       body.latitude = loc.latitude;
       body.longitude = loc.longitude;
@@ -163,8 +163,8 @@ document.getElementById('run').onclick = async () => {
     } else if (wantShare && !loc) {
       saveInfo.textContent = 'تم الحفظ بدون موقع — اسمح بإذن الموقع ثم أعد الفحص للرسم على الخريطة.';
       status.textContent = 'تم الحفظ بدون موقع';
-    } else if (wantShare && loc && loc.accuracy > 1000) {
-      saveInfo.textContent = 'دقة الموقع ضعيفة فلم يُرسم على الخريطة، لكن القياس محفوظ.';
+    } else if (wantShare && loc && loc.accuracy > 2000) {
+      saveInfo.textContent = 'دقة الموقع ضعيفة (~' + Math.round(loc.accuracy) + ' م) فلم يُرسم على الخريطة، لكن القياس محفوظ. فعّل GPS في مكان مفتوح وأعد الفحص.';
       status.textContent = 'تم الحفظ (بدون خلية)';
     } else {
       saveInfo.textContent = 'تم الحفظ بدون مشاركة موقع. فعّل الخيار أعلاه للرسم على الخريطة.';

@@ -19,6 +19,9 @@ class LocationService {
     return ApproximateLocation(lat, lon, p.accuracy);
   }
 
+  /// Max horizontal accuracy (meters) accepted for ~1 km map cells.
+  static const maxShareAccuracyM = 2000.0;
+
   Future<ApproximateLocation> locate() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw const NetworkFailure(
@@ -35,21 +38,33 @@ class LocationService {
         'لم يُمنح إذن الموقع. لن يُرسل موقع؛ يمكنك إجراء اختبار خاص',
       );
     }
+    Position? best;
     try {
-      final p = await Geolocator.getCurrentPosition(
+      // Prefer a real GPS/network fix — LocationAccuracy.lowest often returns
+      // city-level estimates (>2 km) that the server rejects for cell mapping.
+      best = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.lowest,
-          timeLimit: Duration(seconds: 12),
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+          distanceFilter: 0,
         ),
       );
-      return _cell(p);
     } on TimeoutException {
-      final last = await Geolocator.getLastKnownPosition();
-      if (last != null) return _cell(last);
+      best = await Geolocator.getLastKnownPosition();
+    } catch (_) {
+      best = await Geolocator.getLastKnownPosition();
+    }
+    if (best == null) {
       throw const NetworkFailure(
-        'تعذر تحديد الموقع بسرعة؛ أوقف رسم الخريطة مؤقتًا أو فعّل GPS ثم أعد المحاولة',
+        'تعذر تحديد الموقع؛ فعّل GPS وانتظر إشارة ثم أعد المحاولة، أو أوقف مشاركة الموقع',
       );
     }
+    if (best.accuracy > maxShareAccuracyM) {
+      throw NetworkFailure(
+        'دقة الموقع ضعيفة (~${best.accuracy.round()} م). اخرج لمكان مفتوح أو فعّل GPS الدقيق ثم أعد المحاولة',
+      );
+    }
+    return _cell(best);
   }
 }
 
