@@ -1266,7 +1266,7 @@ class _AdminScreenState extends State<AdminScreen>
               ),
               title: Text(u['name']?.toString() ?? ''),
               subtitle: muted(
-                '${u['phone']} • ${u['tests']} قياس${u['is_admin'] == true ? ' • مدير النظام' : ''}${u['created_at_iso'] != null ? '\nأُنشئ: ${u['created_at_iso']}' : ''}',
+                '${u['phone']}${u['gender_label'] != null && '${u['gender_label']}'.isNotEmpty ? ' • ${u['gender_label']}' : ''} • ${u['tests']} قياس${u['is_admin'] == true ? ' • مدير النظام' : ''}${u['created_at_iso'] != null ? '\nأُنشئ: ${u['created_at_iso']}' : ''}',
               ),
               isThreeLine: u['created_at_iso'] != null,
               trailing: u['is_admin'] == true

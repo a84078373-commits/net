@@ -47,6 +47,8 @@ from backend.core import (
 )
 
 PHONE_RE = re.compile(r'^05\d{8}$')
+NAME_PART_RE = re.compile(r'^[\u0600-\u06FFa-zA-Z][\u0600-\u06FFa-zA-Z\s\'-]{0,39}$')
+GENDER_VALUES = {'male', 'female'}
 CONN_TYPES = {'wifi', 'cellular', 'ethernet', 'unknown'}
 
 
@@ -226,7 +228,9 @@ def create_app(settings: Settings | None = None) -> Flask:
         with database.connect() as db:
             db.execute('DELETE FROM auth_sessions WHERE expires < ?', (time.time(),))
             row = db.execute(
-                'SELECT u.id,u.name,u.phone,u.is_admin FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>?',
+                '''SELECT u.id,u.name,u.phone,u.is_admin,u.first_name,u.second_name,u.family_name,u.gender
+                   FROM auth_sessions s JOIN users u ON u.id=s.user_id
+                   WHERE s.token_hash=? AND s.expires>?''',
                 (digest, time.time()),
             ).fetchone()
         if not row:
@@ -244,6 +248,18 @@ def create_app(settings: Settings | None = None) -> Flask:
             raise _ApiError(403, 'هذه الصفحة للمدير فقط')
         return user
 
+    def public_user(user):
+        return {
+            'id': user['id'],
+            'name': user.get('name') or 'مستخدم SmartCare',
+            'phone': user['phone'],
+            'is_admin': bool(user.get('is_admin')),
+            'first_name': user.get('first_name') or '',
+            'second_name': user.get('second_name') or '',
+            'family_name': user.get('family_name') or '',
+            'gender': user.get('gender') or '',
+        }
+
     def issue_token(user):
         token = secrets.token_urlsafe(32)
         expires = time.time() + SESSION_TTL_SECONDS
@@ -259,32 +275,66 @@ def create_app(settings: Settings | None = None) -> Flask:
             )
         return {
             'token': token,
-            'user': {
-                'id': user['id'],
-                'name': user['name'],
-                'phone': user['phone'],
-                'is_admin': bool(user.get('is_admin')),
-            },
+            'user': public_user(user),
             'expires_in': SESSION_TTL_SECONDS,
             'expires_at': expires,
             'phone_verified': False,
         }
 
-    def parse_credentials(body):
+    def parse_phone_password(body, allowed_extra=frozenset()):
         if not isinstance(body, dict):
-            raise _ApiError(422, 'حقول غير صالحة؛ تحقق من القياسات والإحداثيات والقيم المطلوبة')
+            raise _ApiError(422, 'حقول غير صالحة؛ أدخل رقم الجوال وكلمة المرور')
         phone = body.get('phone', '')
         password = body.get('password', '')
-        name = body.get('name', '') or ''
         if not isinstance(phone, str) or not PHONE_RE.match(phone):
-            raise _ApiError(422, 'حقول غير صالحة؛ تحقق من القياسات والإحداثيات والقيم المطلوبة')
+            raise _ApiError(422, 'رقم الجوال يجب أن يكون 05xxxxxxxx')
         if not isinstance(password, str) or not (6 <= len(password) <= 128):
-            raise _ApiError(422, 'حقول غير صالحة؛ تحقق من القياسات والإحداثيات والقيم المطلوبة')
-        if not isinstance(name, str) or len(name) > 80:
-            raise _ApiError(422, 'حقول غير صالحة؛ تحقق من القياسات والإحداثيات والقيم المطلوبة')
-        extra = set(body) - {'phone', 'password', 'name'}
+            raise _ApiError(422, 'كلمة المرور من 6 إلى 128 حرفًا')
+        extra = set(body) - ({'phone', 'password'} | set(allowed_extra))
         if extra:
-            raise _ApiError(422, 'حقول غير صالحة؛ تحقق من القياسات والإحداثيات والقيم المطلوبة')
+            raise _ApiError(422, 'حقول غير صالحة في الطلب')
+        return phone, password
+
+    def parse_name_part(value, label):
+        if not isinstance(value, str):
+            raise _ApiError(422, f'{label} غير صالح')
+        part = ' '.join(value.split())
+        if not NAME_PART_RE.match(part):
+            raise _ApiError(422, f'أدخل {label} بحروف عربية أو إنجليزية (حتى 40 حرفًا)')
+        return part
+
+    def parse_register(body):
+        phone, password = parse_phone_password(
+            body,
+            allowed_extra=frozenset(
+                {'first_name', 'second_name', 'family_name', 'gender', 'name'}
+            ),
+        )
+        first = parse_name_part(body.get('first_name', ''), 'الاسم الأول')
+        second = parse_name_part(body.get('second_name', ''), 'الاسم الثاني')
+        family = parse_name_part(body.get('family_name', ''), 'اسم العائلة')
+        gender = body.get('gender', '')
+        if not isinstance(gender, str) or gender not in GENDER_VALUES:
+            raise _ApiError(422, 'اختر الجنس: ذكر أو أنثى')
+        full_name = f'{first} {second} {family}'.strip()
+        if len(full_name) > 120:
+            raise _ApiError(422, 'الاسم الكامل طويل جدًا')
+        return {
+            'phone': phone,
+            'password': password,
+            'first_name': first,
+            'second_name': second,
+            'family_name': family,
+            'gender': gender,
+            'name': full_name,
+        }
+
+    def parse_credentials(body):
+        """Legacy helper: login fields only (phone + password)."""
+        phone, password = parse_phone_password(body, allowed_extra=frozenset({'name'}))
+        name = body.get('name', '') or ''
+        if not isinstance(name, str) or len(name) > 80:
+            raise _ApiError(422, 'حقول غير صالحة')
         return phone, password, name.strip()
 
     def get_test(user):
@@ -584,6 +634,44 @@ def create_app(settings: Settings | None = None) -> Flask:
             }
         )
 
+    def insert_user(profile, password, *, is_admin=0):
+        salt = secrets.token_hex(16)
+        digest = hashlib.pbkdf2_hmac(
+            'sha256', password.encode(), bytes.fromhex(salt), 600000
+        ).hex()
+        user = {
+            'id': secrets.token_urlsafe(18),
+            'name': profile['name'],
+            'phone': profile['phone'],
+            'first_name': profile.get('first_name', ''),
+            'second_name': profile.get('second_name', ''),
+            'family_name': profile.get('family_name', ''),
+            'gender': profile.get('gender', ''),
+            'is_admin': bool(is_admin),
+        }
+        with database.connect() as db:
+            db.execute(
+                '''INSERT INTO users(
+                    id,phone,name,first_name,second_name,family_name,gender,
+                    salt,password_hash,hash_iterations,is_admin,created_at
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (
+                    user['id'],
+                    user['phone'],
+                    user['name'],
+                    user['first_name'],
+                    user['second_name'],
+                    user['family_name'],
+                    user['gender'],
+                    salt,
+                    digest,
+                    600000,
+                    1 if is_admin else 0,
+                    time.time(),
+                ),
+            )
+        return user
+
     @app.post('/api/auth/register')
     def register():
         throttle(
@@ -592,33 +680,11 @@ def create_app(settings: Settings | None = None) -> Flask:
             900,
         )
         body = request.get_json(silent=True) or {}
-        phone, password, name = parse_credentials(body)
-        salt = secrets.token_hex(16)
-        digest = hashlib.pbkdf2_hmac(
-            'sha256', password.encode(), bytes.fromhex(salt), 600000
-        ).hex()
-        user = {
-            'id': secrets.token_urlsafe(18),
-            'name': name or 'مستخدم SmartCare',
-            'phone': phone,
-            'is_admin': False,
-        }
+        profile = parse_register(body)
         try:
-            with database.connect() as db:
-                db.execute(
-                    'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin,created_at) VALUES(?,?,?,?,?,?,0,?)',
-                    (
-                        user['id'],
-                        user['phone'],
-                        user['name'],
-                        salt,
-                        digest,
-                        600000,
-                        time.time(),
-                    ),
-                )
+            user = insert_user(profile, profile['password'])
         except sqlite3.IntegrityError:
-            raise _ApiError(409, 'تعذر إنشاء الحساب؛ جرّب تسجيل الدخول')
+            raise _ApiError(409, 'هذا الرقم مسجّل مسبقًا؛ سجّل الدخول بالرقم وكلمة المرور')
         return jsonify(issue_token(user)), 201
 
     @app.post('/api/auth/login')
@@ -629,7 +695,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             900,
         )
         body = request.get_json(silent=True) or {}
-        phone, password, _name = parse_credentials(body)
+        phone, password = parse_phone_password(body)
         with database.connect() as db:
             row = db.execute('SELECT * FROM users WHERE phone=?', (phone,)).fetchone()
         salt = bytes.fromhex(row['salt']) if row else bytes(16)
@@ -1098,7 +1164,8 @@ def create_app(settings: Settings | None = None) -> Flask:
         require_admin(current_user())
         with database.connect() as db:
             rows = db.execute(
-                '''SELECT u.id,u.phone,u.name,u.is_admin,u.created_at,
+                '''SELECT u.id,u.phone,u.name,u.first_name,u.second_name,u.family_name,u.gender,
+                          u.is_admin,u.created_at,
                           (SELECT count(*) FROM network_measurements m WHERE m.user_id=u.id) AS tests
                    FROM users u
                    ORDER BY u.is_admin DESC, u.created_at DESC, u.phone'''
@@ -1106,6 +1173,10 @@ def create_app(settings: Settings | None = None) -> Flask:
         items = []
         for r in rows:
             item = {**dict(r), 'is_admin': bool(r['is_admin'])}
+            gender = item.get('gender') or ''
+            item['gender_label'] = (
+                'ذكر' if gender == 'male' else 'أنثى' if gender == 'female' else ''
+            )
             created = item.get('created_at') or 0
             try:
                 item['created_at_iso'] = (
@@ -1282,41 +1353,32 @@ def create_app(settings: Settings | None = None) -> Flask:
     @app.route('/login', methods=['GET', 'POST'])
     def web_login():
         error = None
+        mode = request.form.get('mode', 'login') if request.method == 'POST' else 'login'
         if request.method == 'POST':
             phone = request.form.get('phone', '').strip()
             password = request.form.get('password', '')
             mode = request.form.get('mode', 'login')
-            name = request.form.get('name', '').strip()
             try:
                 if mode == 'register':
-                    body = {'phone': phone, 'password': password, 'name': name}
-                    phone, password, name = parse_credentials(body)
-                    salt = secrets.token_hex(16)
-                    digest = hashlib.pbkdf2_hmac(
-                        'sha256', password.encode(), bytes.fromhex(salt), 600000
-                    ).hex()
-                    user = {
-                        'id': secrets.token_urlsafe(18),
-                        'name': name or 'مستخدم SmartCare',
-                        'phone': phone,
-                        'is_admin': False,
-                    }
-                    with database.connect() as db:
-                        db.execute(
-                            'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin,created_at) VALUES(?,?,?,?,?,?,0,?)',
-                            (
-                                user['id'],
-                                user['phone'],
-                                user['name'],
-                                salt,
-                                digest,
-                                600000,
-                                time.time(),
-                            ),
+                    profile = parse_register(
+                        {
+                            'phone': phone,
+                            'password': password,
+                            'first_name': request.form.get('first_name', ''),
+                            'second_name': request.form.get('second_name', ''),
+                            'family_name': request.form.get('family_name', ''),
+                            'gender': request.form.get('gender', ''),
+                        }
+                    )
+                    try:
+                        user = insert_user(profile, profile['password'])
+                    except sqlite3.IntegrityError:
+                        raise _ApiError(
+                            409, 'هذا الرقم مسجّل مسبقًا؛ سجّل الدخول بالرقم وكلمة المرور'
                         )
                     result = issue_token(user)
                 else:
-                    phone, password, _ = parse_credentials(
+                    phone, password = parse_phone_password(
                         {'phone': phone, 'password': password}
                     )
                     with database.connect() as db:
@@ -1342,9 +1404,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 return redirect(nxt)
             except _ApiError as exc:
                 error = exc.detail
-            except sqlite3.IntegrityError:
-                error = 'تعذر إنشاء الحساب؛ جرّب تسجيل الدخول'
-        return render_template('login.html', error=error)
+        return render_template('login.html', error=error, mode=mode)
 
     @app.post('/logout')
     def web_logout():

@@ -98,7 +98,7 @@ async function reload() {
       const created = x.created_at_iso ? new Date(x.created_at_iso).toLocaleString('ar-SA') : '—';
       return `
       <div class="rowcard">
-        <div><strong>${x.name}</strong><br><span class="muted">${x.phone} • ${x.tests} قياس${x.is_admin?' • مدير':''}<br>أُنشئ: ${created}</span></div>
+        <div><strong>${x.name}</strong><br><span class="muted">${x.phone}${x.gender_label?' • '+x.gender_label:''} • ${x.tests} قياس${x.is_admin?' • مدير':''}<br>${[x.first_name,x.second_name,x.family_name].filter(Boolean).join(' ') || ''}<br>أُنشئ: ${created}</span></div>
         ${x.is_admin?'':`<button type="button" data-del-user="${x.id}" class="danger">حذف</button>`}
       </div>`;
     }).join('') || '<p class="muted">لا مستخدمين</p>');

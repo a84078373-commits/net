@@ -1,24 +1,80 @@
 {% extends "base.html" %}
-{% block title %}تسجيل الدخول{% endblock %}
+{% block title %}{% if mode == 'register' %}إنشاء حساب{% else %}تسجيل الدخول{% endif %}{% endblock %}
 {% block content %}
 <section class="panel auth-card" aria-labelledby="login-title">
-  <h1 id="login-title">تسجيل الدخول</h1>
-  <p class="muted">المدير: 0552515874 • كلمة المرور من إعدادات الخادم • الجلسة 15 دقيقة</p>
+  <h1 id="login-title">{% if mode == 'register' %}إنشاء حساب{% else %}تسجيل الدخول{% endif %}</h1>
+  <p class="muted">
+    {% if mode == 'register' %}
+      الحساب يُحفظ في قاعدة بيانات الخادم. بعد الإنشاء استخدم الرقم وكلمة المرور فقط للدخول.
+    {% else %}
+      الدخول برقم الجوال وكلمة المرور فقط — بدون اسم. الجلسة 15 دقيقة.
+    {% endif %}
+  </p>
   {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
-  <form method="post" class="stack" novalidate>
-    <label for="name">الاسم (للتسجيل فقط)
-      <input id="name" name="name" maxlength="80" autocomplete="name" placeholder="اختياري عند الدخول">
-    </label>
+  <form method="post" class="stack" id="authForm" novalidate>
+    <div id="registerFields" {% if mode != 'register' %}hidden{% endif %}>
+      <label for="first_name">الاسم الأول
+        <input id="first_name" name="first_name" maxlength="40" autocomplete="given-name" value="{{ request.form.get('first_name','') if request.method=='POST' else '' }}">
+      </label>
+      <label for="second_name">الاسم الثاني
+        <input id="second_name" name="second_name" maxlength="40" autocomplete="additional-name" value="{{ request.form.get('second_name','') if request.method=='POST' else '' }}">
+      </label>
+      <label for="family_name">اسم العائلة
+        <input id="family_name" name="family_name" maxlength="40" autocomplete="family-name" value="{{ request.form.get('family_name','') if request.method=='POST' else '' }}">
+      </label>
+      <fieldset class="stack-tight" style="border:0;padding:0;margin:0">
+        <legend style="font-weight:700;margin-bottom:0.35rem">الجنس</legend>
+        <label class="row" style="gap:0.5rem;align-items:center;font-weight:600">
+          <input type="radio" name="gender" value="male" {% if request.form.get('gender')=='male' %}checked{% endif %}> ذكر
+        </label>
+        <label class="row" style="gap:0.5rem;align-items:center;font-weight:600">
+          <input type="radio" name="gender" value="female" {% if request.form.get('gender')=='female' %}checked{% endif %}> أنثى
+        </label>
+      </fieldset>
+    </div>
     <label for="phone">رقم الجوال
-      <input id="phone" name="phone" required pattern="05[0-9]{8}" inputmode="numeric" autocomplete="username" placeholder="05xxxxxxxx">
+      <input id="phone" name="phone" required pattern="05[0-9]{8}" inputmode="numeric" autocomplete="username" placeholder="05xxxxxxxx" value="{{ request.form.get('phone','') if request.method=='POST' else '' }}">
     </label>
     <label for="password">كلمة المرور
-      <input id="password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="current-password">
+      <input id="password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="{{ 'new-password' if mode=='register' else 'current-password' }}">
     </label>
     <div class="row btn-row-split">
-      <button name="mode" value="login" type="submit" class="primary">دخول</button>
-      <button name="mode" value="register" type="submit" class="ghost">إنشاء حساب</button>
+      <button name="mode" value="login" type="submit" class="primary" id="btnLogin">دخول</button>
+      <button name="mode" value="register" type="submit" class="ghost" id="btnRegister">إنشاء حساب</button>
     </div>
   </form>
+  <p class="muted" style="margin-top:1rem">
+    <button type="button" class="ghost" id="toggleMode" style="width:100%">
+      {% if mode == 'register' %}لديك حساب؟ إظهار نموذج الدخول{% else %}مستخدم جديد؟ إظهار حقول إنشاء الحساب{% endif %}
+    </button>
+  </p>
 </section>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const fields = document.getElementById('registerFields');
+  const title = document.getElementById('login-title');
+  const toggle = document.getElementById('toggleMode');
+  const btnLogin = document.getElementById('btnLogin');
+  const btnRegister = document.getElementById('btnRegister');
+  let register = {{ 'true' if mode == 'register' else 'false' }};
+
+  function sync() {
+    fields.hidden = !register;
+    title.textContent = register ? 'إنشاء حساب' : 'تسجيل الدخول';
+    toggle.textContent = register
+      ? 'لديك حساب؟ إظهار نموذج الدخول'
+      : 'مستخدم جديد؟ إظهار حقول إنشاء الحساب';
+    btnLogin.className = register ? 'ghost' : 'primary';
+    btnRegister.className = register ? 'primary' : 'ghost';
+    ['first_name','second_name','family_name'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.required = register;
+    });
+  }
+  toggle.addEventListener('click', () => { register = !register; sync(); });
+  sync();
+})();
+</script>
 {% endblock %}

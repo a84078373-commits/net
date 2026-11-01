@@ -106,6 +106,14 @@ class Database:
                     'UPDATE users SET created_at=? WHERE created_at=0 OR created_at IS NULL',
                     (time.time(),),
                 )
+            for col, decl in (
+                ('first_name', 'TEXT NOT NULL DEFAULT \'\''),
+                ('second_name', 'TEXT NOT NULL DEFAULT \'\''),
+                ('family_name', 'TEXT NOT NULL DEFAULT \'\''),
+                ('gender', 'TEXT NOT NULL DEFAULT \'\''),
+            ):
+                if col not in cols:
+                    db.execute(f'ALTER TABLE users ADD COLUMN {col} {decl}')
         if os.name == 'posix':
             with suppress(OSError):
                 os.chmod(path, 0o600)

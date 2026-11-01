@@ -7,6 +7,19 @@ import pytest
 from backend.app import create_app, Settings, QUALITY, MIB, cell_for, classify
 
 
+def register_body(phone, password='test-only-password-2026', **extra):
+    body = {
+        'phone': phone,
+        'password': password,
+        'first_name': 'Fixture',
+        'second_name': 'User',
+        'family_name': 'Alpha',
+        'gender': 'male',
+    }
+    body.update(extra)
+    return body
+
+
 @pytest.fixture
 def setup(tmp_path):
     app = create_app(Settings(db=str(tmp_path / 'test-only.sqlite3'), testing=True))
@@ -15,11 +28,10 @@ def setup(tmp_path):
     for i in range(4):
         r = client.post(
             '/api/auth/register',
-            json={
-                'phone': f'050000000{i}',
-                'password': 'test-only-password-2026',
-                'name': f'fixture {i}',
-            },
+            json=register_body(
+                f'050000000{i}',
+                gender='male' if i % 2 == 0 else 'female',
+            ),
         )
         assert r.status_code == 201, r.get_data(as_text=True)
         users.append(r.get_json())
@@ -254,7 +266,8 @@ def test_disabled_local_server_never_fabricates_a_test(tmp_path):
     app = create_app(Settings(db=str(tmp_path / 'empty.sqlite3')))
     c = app.test_client()
     user = c.post(
-        '/api/auth/register', json={'phone': '0511111111', 'password': 'local-password-only'}
+        '/api/auth/register',
+        json=register_body('0511111111', password='local-password-only'),
     ).get_json()
     assert c.get('/api/network-config').get_json()['test']['available'] is False
     assert c.post('/api/speed/sessions', headers=auth(user)).status_code == 503
@@ -275,7 +288,8 @@ def test_loopback_speed_can_be_enabled_for_development(tmp_path):
     assert cfg['mode'] == 'local'
     assert cfg['server_id'] == 'http://localhost:8765'
     user = c.post(
-        '/api/auth/register', json={'phone': '0511111112', 'password': 'local-password-only'}
+        '/api/auth/register',
+        json=register_body('0511111112', password='local-password-only'),
     ).get_json()
     assert c.post('/api/speed/sessions', headers=auth(user)).status_code == 201
 

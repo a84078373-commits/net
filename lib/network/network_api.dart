@@ -12,6 +12,22 @@ class NetworkFailure implements Exception {
   String toString() => message;
 }
 
+class AuthRegister {
+  final String firstName, secondName, familyName, gender;
+  const AuthRegister({
+    required this.firstName,
+    required this.secondName,
+    required this.familyName,
+    required this.gender,
+  });
+  Map<String, dynamic> toJson() => {
+    'first_name': firstName,
+    'second_name': secondName,
+    'family_name': familyName,
+    'gender': gender,
+  };
+}
+
 class NetworkApi extends ChangeNotifier {
   final String baseUrl;
   http.Client client;
@@ -110,15 +126,15 @@ class NetworkApi extends ChangeNotifier {
   Future<void> authenticate(
     String phone,
     String password, {
-    String? name,
+    AuthRegister? register,
   }) async {
     final result = await request(
-      name == null ? '/api/auth/login' : '/api/auth/register',
+      register == null ? '/api/auth/login' : '/api/auth/register',
       method: 'POST',
       body: {
         'phone': phone,
         'password': password,
-        if (name != null) 'name': name,
+        if (register != null) ...register.toJson(),
       },
     );
     token = result['token'];
