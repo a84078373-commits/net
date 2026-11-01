@@ -10,8 +10,9 @@ import 'theme.dart';
 
 const _city = LatLng(27.5219, 41.6907);
 const _customTileUrl = String.fromEnvironment('SMARTCARE_TILE_URL');
-// Free OSM tiles — no API key (Carto CDN now requires a key).
-const _osmTiles = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+// Free Esri streets — no API key (OSM.org volunteer tiles return 403 for many apps).
+const _osmTiles =
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
 const _views = [
   LatLng(27.549, 41.697),
   LatLng(27.485, 41.704),

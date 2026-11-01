@@ -18,8 +18,9 @@ const BOUNDS = {{ bounds|tojson }};
 const COLORS = {{ colors|tojson }};
 const TOKEN = {{ token|tojson }};
 const map = L.map('map').setView([(BOUNDS[1]+BOUNDS[3])/2, (BOUNDS[0]+BOUNDS[2])/2], 11);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+// Esri streets — free for light use, no API key (OSM.org tiles block many apps with 403).
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles &copy; Esri',
   maxZoom: 19
 }).addTo(map);
 map.setMaxBounds([[BOUNDS[1]-0.05, BOUNDS[0]-0.05],[BOUNDS[3]+0.05, BOUNDS[2]+0.05]]);
