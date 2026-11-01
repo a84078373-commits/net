@@ -125,10 +125,9 @@ void main() {
         headers: {'content-type': 'application/json; charset=utf-8'},
       ),
     );
-    addTearDown(() {
+    addTearDown(() async {
       networkApi.client = previousClient;
-      networkApi.token = null;
-      networkApi.user = null;
+      await networkApi.signOut();
     });
     await tester.pumpWidget(const SmartCare());
     await tester.tap(find.byTooltip('حسابي والمزيد'));

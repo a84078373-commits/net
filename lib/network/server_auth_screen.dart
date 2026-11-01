@@ -228,7 +228,7 @@ class _ServerAuthScreenState extends State<ServerAuthScreen> {
                     ),
                   ),
                   const Text(
-                    'الحساب يُحفظ دائمًا في قاعدة بيانات الخادم. جلسة التطبيق تنتهي بعد 15 دقيقة أو عند إغلاق التطبيق؛ أعد الدخول بالرقم وكلمة المرور.',
+                    'الحساب والجلسة محفوظان على الجهاز والخادم. تبقى مسجّلًا حتى تضغط تسجيل الخروج.',
                     style: TextStyle(
                       fontSize: 11,
                       color: StcColors.silver,

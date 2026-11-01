@@ -94,7 +94,7 @@ async function reload() {
         <p class="muted">Gemini: ${o.gemini_configured?'مضبوط':'غير مضبوط'} • Speed: ${o.speed_enabled?'مفعّل':'متوقف'}</p>
         <p class="muted">Origin: ${o.public_origin||'—'}</p>
       </div>`;
-    document.getElementById('users').innerHTML = `<p class="muted">${u.count ?? (u.items||[]).length} حساب محفوظ في قاعدة البيانات • الجلسة 15 دقيقة</p>` + ((u.items||[]).map(x => {
+    document.getElementById('users').innerHTML = `<p class="muted">${u.count ?? (u.items||[]).length} حساب محفوظ في قاعدة البيانات • الجلسة حتى تسجيل الخروج</p>` + ((u.items||[]).map(x => {
       const created = x.created_at_iso ? new Date(x.created_at_iso).toLocaleString('ar-SA') : '—';
       return `
       <div class="rowcard">

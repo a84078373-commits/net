@@ -18,7 +18,8 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
-SESSION_TTL_SECONDS = 15 * 60  # 15 minutes
+# Stay signed in until explicit logout (browser cookie max ~400 days).
+SESSION_TTL_SECONDS = int(os.getenv('SMARTCARE_SESSION_TTL_SECONDS', str(365 * 24 * 60 * 60)))
 
 import httpx
 from flask import (
@@ -74,6 +75,8 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(seconds=SESSION_TTL_SECONDS)
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_SECURE'] = not cfg.testing
+    app.config['SESSION_REFRESH_EACH_REQUEST'] = True
 
     sessions: dict = {}
     lock = threading.Lock()
@@ -207,6 +210,19 @@ def create_app(settings: Settings | None = None) -> Flask:
         response.headers['Referrer-Policy'] = 'no-referrer'
         return response
 
+    def touch_session(token_hash: str):
+        """Extend server session on activity so logout is the only disconnect."""
+        expires = time.time() + SESSION_TTL_SECONDS
+        with database.connect() as db:
+            db.execute(
+                'UPDATE auth_sessions SET expires=? WHERE token_hash=?',
+                (expires, token_hash),
+            )
+        if session.get('api_token'):
+            session.permanent = True
+            session['expires_at'] = expires
+        return expires
+
     def current_user(required=True):
         auth = request.headers.get('authorization', '')
         token = None
@@ -217,7 +233,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             if expires_at and float(expires_at) < time.time():
                 session.clear()
                 if required:
-                    raise _ApiError(401, 'انتهت الجلسة بعد 15 دقيقة؛ سجّل الدخول مجددًا')
+                    raise _ApiError(401, 'انتهت الجلسة؛ سجّل الدخول مجددًا')
                 return None
             token = session['api_token']
         if not token:
@@ -236,8 +252,9 @@ def create_app(settings: Settings | None = None) -> Flask:
         if not row:
             session.clear()
             if required:
-                raise _ApiError(401, 'انتهت الجلسة بعد 15 دقيقة؛ سجّل الدخول مجددًا')
+                raise _ApiError(401, 'انتهت الجلسة؛ سجّل الدخول مجددًا')
             return None
+        touch_session(digest)
         user = dict(row)
         user['is_admin'] = bool(user.get('is_admin'))
         user['_token'] = token
@@ -717,6 +734,16 @@ def create_app(settings: Settings | None = None) -> Flask:
                     (upgraded, row['id']),
                 )
         return jsonify(issue_token(dict(row)))
+
+    @app.get('/api/auth/me')
+    def auth_me():
+        user = current_user()
+        return jsonify(
+            {
+                'user': public_user(user),
+                'expires_in': SESSION_TTL_SECONDS,
+            }
+        )
 
     @app.delete('/api/auth/session')
     def logout():

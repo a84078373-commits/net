@@ -107,8 +107,7 @@ class AppStore extends ChangeNotifier {
         name = j['name'];
         phone = j['phone'];
         area = j['area'];
-        signedIn =
-            false; // Server sessions are memory-only and never restored as a demo login.
+        signedIn = j['signedIn'] == true;
         notifications = j['notifications'];
         autoSave = j['autoSave'];
         reports.addAll(

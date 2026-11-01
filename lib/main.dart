@@ -15,6 +15,12 @@ Future<void> main() async {
     ),
   );
   await appStore.load();
+  await networkApi.restoreSession();
+  appStore.signedIn = networkApi.token != null;
+  if (networkApi.user != null) {
+    appStore.name = networkApi.user!['name']?.toString() ?? appStore.name;
+    appStore.phone = networkApi.user!['phone']?.toString() ?? appStore.phone;
+  }
   runApp(const SmartCare());
 }
 

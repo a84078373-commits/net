@@ -2,8 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 final networkApi = NetworkApi();
+
+const _tokenKey = 'smartcare.auth.token';
+const _userKey = 'smartcare.auth.user';
 
 class NetworkFailure implements Exception {
   final String message;
@@ -63,6 +67,48 @@ class NetworkApi extends ChangeNotifier {
     ).replace(queryParameters: query);
   }
 
+  Future<void> restoreSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_tokenKey);
+      final rawUser = prefs.getString(_userKey);
+      if (saved == null || saved.isEmpty || rawUser == null) return;
+      token = saved;
+      user = Map<String, dynamic>.from(jsonDecode(rawUser) as Map);
+      notifyListeners();
+      // Confirm token still valid and slide server expiry; clear if revoked.
+      try {
+        final me = await request('/api/auth/me');
+        if (me['user'] is Map) {
+          user = Map<String, dynamic>.from(me['user'] as Map);
+          await _persist();
+          notifyListeners();
+        }
+      } on NetworkFailure {
+        // 401 already cleared token inside request(); network errors keep local session.
+      }
+    } catch (_) {
+      // Offline restore: keep local token until a later request succeeds or 401s.
+    }
+  }
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (token == null || user == null) {
+      await prefs.remove(_tokenKey);
+      await prefs.remove(_userKey);
+      return;
+    }
+    await prefs.setString(_tokenKey, token!);
+    await prefs.setString(_userKey, jsonEncode(user));
+  }
+
+  Future<void> _clearPersisted() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+    await prefs.remove(_userKey);
+  }
+
   Future<Map<String, dynamic>> request(
     String path, {
     String method = 'GET',
@@ -92,6 +138,7 @@ class NetworkApi extends ChangeNotifier {
       if (response.statusCode == 401) {
         token = null;
         user = null;
+        await _clearPersisted();
         notifyListeners();
       }
       final json = response.body.isEmpty
@@ -137,8 +184,9 @@ class NetworkApi extends ChangeNotifier {
         if (register != null) ...register.toJson(),
       },
     );
-    token = result['token'];
-    user = Map<String, dynamic>.from(result['user']);
+    token = result['token'] as String?;
+    user = Map<String, dynamic>.from(result['user'] as Map);
+    await _persist();
     notifyListeners();
   }
 
@@ -146,10 +194,11 @@ class NetworkApi extends ChangeNotifier {
     try {
       if (token != null) await request('/api/auth/session', method: 'DELETE');
     } catch (_) {
-      // Local logout must still succeed offline; server sessions expire in 15 minutes.
+      // Local logout must still succeed offline.
     } finally {
       token = null;
       user = null;
+      await _clearPersisted();
       notifyListeners();
     }
   }
