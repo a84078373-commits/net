@@ -80,11 +80,14 @@ async function reload() {
       <p class="muted">متوسط ↓ ${(o.avg_download_mbps??0).toFixed?.(1) ?? '—'} • ↑ ${(o.avg_upload_mbps??0).toFixed?.(1) ?? '—'} • بنق ${(o.avg_ping_ms??0).toFixed?.(0) ?? '—'}</p>
       <p class="muted">Gemini: ${o.gemini_configured?'مضبوط':'غير مضبوط'} • Speed: ${o.speed_enabled?'مفعّل':'متوقف'}</p>
       <p class="muted">Origin: ${o.public_origin||'—'}</p>`;
-    document.getElementById('users').innerHTML = (u.items||[]).map(x => `
+    document.getElementById('users').innerHTML = `<p class="muted">${u.count ?? (u.items||[]).length} حساب محفوظ في قاعدة البيانات • الجلسة 15 دقيقة</p>` + ((u.items||[]).map(x => {
+      const created = x.created_at_iso ? new Date(x.created_at_iso).toLocaleString('ar-SA') : '—';
+      return `
       <div class="rowcard">
-        <div><strong>${x.name}</strong><br><span class="muted">${x.phone} • ${x.tests} قياس${x.is_admin?' • مدير':''}</span></div>
+        <div><strong>${x.name}</strong><br><span class="muted">${x.phone} • ${x.tests} قياس${x.is_admin?' • مدير':''}<br>أُنشئ: ${created}</span></div>
         ${x.is_admin?'':`<button type="button" data-del-user="${x.id}" class="danger">حذف</button>`}
-      </div>`).join('') || '<p class="muted">لا مستخدمين</p>';
+      </div>`;
+    }).join('') || '<p class="muted">لا مستخدمين</p>');
     document.getElementById('measurements').innerHTML = (m.items||[]).map(x => `
       <div class="rowcard">
         <div><strong>${x.phone}</strong><br><span class="muted">↓ ${(x.download_mbps||0).toFixed(1)} • ↑ ${(x.upload_mbps||0).toFixed(1)} • ${(x.ping_ms||0).toFixed(0)} ms • ${x.connection_type}</span></div>

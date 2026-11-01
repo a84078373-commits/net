@@ -14,8 +14,11 @@ import statistics
 import threading
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from urllib.parse import urlsplit
+
+SESSION_TTL_SECONDS = 15 * 60  # 15 minutes
 
 import httpx
 from flask import (
@@ -66,6 +69,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.config['SECRET_KEY'] = cfg.secret_key
     app.config['JSON_AS_ASCII'] = False
     app.config['MAX_CONTENT_LENGTH'] = 2 * MIB + 4096
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(seconds=SESSION_TTL_SECONDS)
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
     sessions: dict = {}
     lock = threading.Lock()
@@ -205,6 +211,12 @@ def create_app(settings: Settings | None = None) -> Flask:
         if auth.startswith('Bearer '):
             token = auth[7:]
         elif session.get('api_token'):
+            expires_at = session.get('expires_at')
+            if expires_at and float(expires_at) < time.time():
+                session.clear()
+                if required:
+                    raise _ApiError(401, 'انتهت الجلسة بعد 15 دقيقة؛ سجّل الدخول مجددًا')
+                return None
             token = session['api_token']
         if not token:
             if required:
@@ -212,13 +224,15 @@ def create_app(settings: Settings | None = None) -> Flask:
             return None
         digest = hashlib.sha256(token.encode()).hexdigest()
         with database.connect() as db:
+            db.execute('DELETE FROM auth_sessions WHERE expires < ?', (time.time(),))
             row = db.execute(
                 'SELECT u.id,u.name,u.phone,u.is_admin FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>?',
                 (digest, time.time()),
             ).fetchone()
         if not row:
+            session.clear()
             if required:
-                raise _ApiError(401, 'انتهت جلسة الدخول')
+                raise _ApiError(401, 'انتهت الجلسة بعد 15 دقيقة؛ سجّل الدخول مجددًا')
             return None
         user = dict(row)
         user['is_admin'] = bool(user.get('is_admin'))
@@ -232,13 +246,15 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     def issue_token(user):
         token = secrets.token_urlsafe(32)
+        expires = time.time() + SESSION_TTL_SECONDS
         with database.connect() as db:
+            db.execute('DELETE FROM auth_sessions WHERE expires < ?', (time.time(),))
             db.execute(
                 'INSERT INTO auth_sessions VALUES(?,?,?)',
                 (
                     hashlib.sha256(token.encode()).hexdigest(),
                     user['id'],
-                    time.time() + 8 * 3600,
+                    expires,
                 ),
             )
         return {
@@ -249,7 +265,8 @@ def create_app(settings: Settings | None = None) -> Flask:
                 'phone': user['phone'],
                 'is_admin': bool(user.get('is_admin')),
             },
-            'expires_in': 28800,
+            'expires_in': SESSION_TTL_SECONDS,
+            'expires_at': expires,
             'phone_verified': False,
         }
 
@@ -589,8 +606,16 @@ def create_app(settings: Settings | None = None) -> Flask:
         try:
             with database.connect() as db:
                 db.execute(
-                    'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin) VALUES(?,?,?,?,?,?,0)',
-                    (user['id'], user['phone'], user['name'], salt, digest, 600000),
+                    'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin,created_at) VALUES(?,?,?,?,?,?,0,?)',
+                    (
+                        user['id'],
+                        user['phone'],
+                        user['name'],
+                        salt,
+                        digest,
+                        600000,
+                        time.time(),
+                    ),
                 )
         except sqlite3.IntegrityError:
             raise _ApiError(409, 'تعذر إنشاء الحساب؛ جرّب تسجيل الدخول')
@@ -1074,13 +1099,25 @@ def create_app(settings: Settings | None = None) -> Flask:
         require_admin(current_user())
         with database.connect() as db:
             rows = db.execute(
-                '''SELECT u.id,u.phone,u.name,u.is_admin,
+                '''SELECT u.id,u.phone,u.name,u.is_admin,u.created_at,
                           (SELECT count(*) FROM network_measurements m WHERE m.user_id=u.id) AS tests
-                   FROM users u ORDER BY u.is_admin DESC, u.phone'''
+                   FROM users u
+                   ORDER BY u.is_admin DESC, u.created_at DESC, u.phone'''
             ).fetchall()
-        return jsonify(
-            {'items': [{**dict(r), 'is_admin': bool(r['is_admin'])} for r in rows]}
-        )
+        items = []
+        for r in rows:
+            item = {**dict(r), 'is_admin': bool(r['is_admin'])}
+            created = item.get('created_at') or 0
+            try:
+                item['created_at_iso'] = (
+                    datetime.fromtimestamp(float(created), tz=timezone.utc).isoformat()
+                    if created
+                    else None
+                )
+            except (TypeError, ValueError, OSError):
+                item['created_at_iso'] = None
+            items.append(item)
+        return jsonify({'items': items, 'count': len(items)})
 
     @app.get('/api/admin/measurements')
     def admin_measurements():
@@ -1267,8 +1304,16 @@ def create_app(settings: Settings | None = None) -> Flask:
                     }
                     with database.connect() as db:
                         db.execute(
-                            'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin) VALUES(?,?,?,?,?,?,0)',
-                            (user['id'], user['phone'], user['name'], salt, digest, 600000),
+                            'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin,created_at) VALUES(?,?,?,?,?,?,0,?)',
+                            (
+                                user['id'],
+                                user['phone'],
+                                user['name'],
+                                salt,
+                                digest,
+                                600000,
+                                time.time(),
+                            ),
                         )
                     result = issue_token(user)
                 else:
@@ -1289,8 +1334,11 @@ def create_app(settings: Settings | None = None) -> Flask:
                     if not row or not hmac.compare_digest(digest, row['password_hash']):
                         raise _ApiError(401, 'رقم الجوال أو كلمة المرور غير صحيحة')
                     result = issue_token(dict(row))
+                session.clear()
+                session.permanent = True
                 session['api_token'] = result['token']
                 session['user'] = result['user']
+                session['expires_at'] = result['expires_at']
                 nxt = request.args.get('next') or url_for('home')
                 return redirect(nxt)
             except _ApiError as exc:

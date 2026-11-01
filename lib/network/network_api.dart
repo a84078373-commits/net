@@ -130,7 +130,7 @@ class NetworkApi extends ChangeNotifier {
     try {
       if (token != null) await request('/api/auth/session', method: 'DELETE');
     } catch (_) {
-      // Local logout must still succeed offline; server sessions expire in 8h.
+      // Local logout must still succeed offline; server sessions expire in 15 minutes.
     } finally {
       token = null;
       user = null;

@@ -1266,8 +1266,9 @@ class _AdminScreenState extends State<AdminScreen>
               ),
               title: Text(u['name']?.toString() ?? ''),
               subtitle: muted(
-                '${u['phone']} • ${u['tests']} قياس${u['is_admin'] == true ? ' • مدير النظام' : ''}',
+                '${u['phone']} • ${u['tests']} قياس${u['is_admin'] == true ? ' • مدير النظام' : ''}${u['created_at_iso'] != null ? '\nأُنشئ: ${u['created_at_iso']}' : ''}',
               ),
+              isThreeLine: u['created_at_iso'] != null,
               trailing: u['is_admin'] == true
                   ? const Icon(Icons.verified, color: _purple)
                   : IconButton(

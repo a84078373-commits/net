@@ -74,7 +74,7 @@ class Database:
             db.executescript(
                 '''
               PRAGMA journal_mode=WAL;
-              CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, phone TEXT UNIQUE NOT NULL, name TEXT NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, hash_iterations INTEGER NOT NULL DEFAULT 600000, is_admin INTEGER NOT NULL DEFAULT 0);
+              CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, phone TEXT UNIQUE NOT NULL, name TEXT NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, hash_iterations INTEGER NOT NULL DEFAULT 600000, is_admin INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL DEFAULT 0);
               CREATE TABLE IF NOT EXISTS auth_sessions(token_hash TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id) ON DELETE CASCADE, expires REAL NOT NULL);
               CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at REAL NOT NULL);
               CREATE TABLE IF NOT EXISTS network_measurements(
@@ -98,6 +98,14 @@ class Database:
                 db.execute(
                     'ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0'
                 )
+            if 'created_at' not in cols:
+                db.execute(
+                    'ALTER TABLE users ADD COLUMN created_at REAL NOT NULL DEFAULT 0'
+                )
+                db.execute(
+                    'UPDATE users SET created_at=? WHERE created_at=0 OR created_at IS NULL',
+                    (time.time(),),
+                )
         if os.name == 'posix':
             with suppress(OSError):
                 os.chmod(path, 0o600)
@@ -116,8 +124,16 @@ class Database:
                 )
             else:
                 db.execute(
-                    'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin) VALUES(?,?,?,?,?,?,1)',
-                    (secrets.token_urlsafe(18), phone, name, salt, digest, 600000),
+                    'INSERT INTO users(id,phone,name,salt,password_hash,hash_iterations,is_admin,created_at) VALUES(?,?,?,?,?,?,1,?)',
+                    (
+                        secrets.token_urlsafe(18),
+                        phone,
+                        name,
+                        salt,
+                        digest,
+                        600000,
+                        time.time(),
+                    ),
                 )
             if os.getenv('SMARTCARE_GEMINI_API_KEY'):
                 db.execute(
