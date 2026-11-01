@@ -12,6 +12,13 @@ class ApproximateLocation {
 }
 
 class LocationService {
+  ApproximateLocation _cell(Position p) {
+    // Match the backend's 0.01 degree grid before transmission, never send GPS.
+    final lat = (p.latitude / .01).floor() * .01 + .005;
+    final lon = (p.longitude / .01).floor() * .01 + .005;
+    return ApproximateLocation(lat, lon, p.accuracy);
+  }
+
   Future<ApproximateLocation> locate() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw const NetworkFailure(
@@ -28,16 +35,21 @@ class LocationService {
         'لم يُمنح إذن الموقع. لن يُرسل موقع؛ يمكنك إجراء اختبار خاص',
       );
     }
-    final p = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.low,
-        timeLimit: Duration(seconds: 20),
-      ),
-    );
-    // Match the backend's 0.01 degree grid before transmission, never send GPS.
-    final lat = (p.latitude / .01).floor() * .01 + .005;
-    final lon = (p.longitude / .01).floor() * .01 + .005;
-    return ApproximateLocation(lat, lon, p.accuracy);
+    try {
+      final p = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.lowest,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+      return _cell(p);
+    } on TimeoutException {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) return _cell(last);
+      throw const NetworkFailure(
+        'تعذر تحديد الموقع بسرعة؛ أوقف رسم الخريطة مؤقتًا أو فعّل GPS ثم أعد المحاولة',
+      );
+    }
   }
 }
 

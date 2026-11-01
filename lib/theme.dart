@@ -2,6 +2,26 @@ import 'package:flutter/material.dart';
 
 /// Official stc brand tokens from the public brand booklet,
 /// applied in the visual language of the 2026 mystc SA app.
+class StcBrand {
+  static const profileAsset = 'assets/brand/stc_profile.png';
+}
+
+class StcProfileAvatar extends StatelessWidget {
+  final double radius;
+  final Color backgroundColor;
+  const StcProfileAvatar({
+    super.key,
+    this.radius = 16,
+    this.backgroundColor = Colors.white,
+  });
+  @override
+  Widget build(BuildContext context) => CircleAvatar(
+    radius: radius,
+    backgroundColor: backgroundColor,
+    backgroundImage: const AssetImage(StcBrand.profileAsset),
+  );
+}
+
 class StcColors {
   static const purple = Color(0xFF4F008C);
   static const purpleDeep = Color(0xFF3A0068);
@@ -37,7 +57,7 @@ ThemeData stcTheme() {
     useMaterial3: true,
     brightness: Brightness.light,
     fontFamily: 'Segoe UI',
-    scaffoldBackgroundColor: StcColors.canvas,
+    scaffoldBackgroundColor: Colors.white,
     colorScheme: const ColorScheme.light(
       primary: StcColors.purple,
       secondary: StcColors.coral,
@@ -100,10 +120,10 @@ ThemeData stcTheme() {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: StcColors.purple,
+        backgroundColor: StcColors.coral,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
       ),
     ),

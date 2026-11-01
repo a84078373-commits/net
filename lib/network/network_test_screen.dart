@@ -3,7 +3,6 @@ import '../theme.dart';
 import 'network_api.dart';
 import 'server_auth_screen.dart';
 import 'speed_test_service.dart';
-
 class NetworkTestScreen extends StatelessWidget {
   const NetworkTestScreen({super.key});
   @override
@@ -117,9 +116,18 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
     });
     try {
       ApproximateLocation? location;
-      if (share) {
+      var shareThisRun = share;
+      if (shareThisRun) {
         setState(() => phase = 'بانتظار إذن الموقع');
-        location = await LocationService().locate();
+        try {
+          location = await LocationService().locate();
+        } on NetworkFailure catch (e) {
+          // Speed measurement must still run; map share is optional.
+          shareThisRun = false;
+          if (mounted) {
+            setState(() => error = '${e.message} • سيُحفظ القياس دون رسم على الخريطة');
+          }
+        }
       }
       if (!mounted || cancelled) {
         throw const NetworkFailure('أُلغي الاختبار قبل نقل البيانات');
@@ -136,11 +144,19 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
         },
       );
       if (mounted) setState(() => result = value);
-      if (mounted && !(share && value.location == null)) {
-        await save();
+      if (mounted && !(shareThisRun && value.location == null)) {
+        final previous = share;
+        share = shareThisRun;
+        try {
+          await save();
+        } finally {
+          share = previous;
+        }
       }
     } catch (e) {
-      if (mounted) setState(() => error = e.toString());
+      if (mounted) {
+        setState(() => error = e is NetworkFailure ? e.message : e.toString());
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
