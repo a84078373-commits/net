@@ -118,7 +118,7 @@ class _ServerAuthScreenState extends State<ServerAuthScreen> {
                     maxLength: 128,
                     decoration: InputDecoration(
                       labelText: 'كلمة المرور',
-                      helperText: '12 حرفًا على الأقل',
+                      helperText: '6 أحرف على الأقل',
                       suffixIcon: IconButton(
                         onPressed: () => setState(() => hidden = !hidden),
                         icon: Icon(
@@ -128,9 +128,9 @@ class _ServerAuthScreenState extends State<ServerAuthScreen> {
                         ),
                       ),
                     ),
-                    validator: (v) => (v ?? '').length >= 12
+                    validator: (v) => (v ?? '').length >= 6
                         ? null
-                        : 'استخدم كلمة مرور من 12 حرفًا على الأقل',
+                        : 'استخدم كلمة مرور من 6 أحرف على الأقل',
                   ),
                   const SizedBox(height: 16),
                   if (error != null)

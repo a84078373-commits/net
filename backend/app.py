@@ -44,7 +44,7 @@ class Settings:
 class Credentials(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     phone: str = Field(pattern=r'^05\d{8}$')
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(min_length=6, max_length=128)
     name: str = Field(default='', max_length=80)
 
 class MeasurementIn(BaseModel):
