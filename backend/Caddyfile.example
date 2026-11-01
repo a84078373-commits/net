@@ -1,0 +1,14 @@
+# Run Caddy on the public host; set SMARTCARE_DOMAIN to your own DNS name.
+# No response compression for speed endpoints. HTTPS handled by Caddy.
+{$SMARTCARE_DOMAIN} {
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8765 {
+            flush_interval -1
+        }
+    }
+    handle {
+        root * {$SMARTCARE_WEB_ROOT}
+        try_files {path} /index.html
+        file_server
+    }
+}

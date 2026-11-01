@@ -1,0 +1,14 @@
+{
+  "version": "project-v1",
+  "description_ar": "حدود إرشادية للمشروع قابلة للتعديل، وليست معيارًا رسميًا أو ضمانًا للأداء.",
+  "cell_degrees": 0.01,
+  "min_samples": 5,
+  "min_contributors": 3,
+  "stale_hours": 72,
+  "retention_days": 90,
+  "bounds": [41.45, 27.30, 41.95, 27.80],
+  "download": [5, 15, 50],
+  "upload": [1, 3, 10],
+  "ping": [50, 100, 200],
+  "colors": {"good": "#39DDB3", "moderate": "#F5D76E", "poor": "#FF914D", "very_poor": "#EF526A", "insufficient": "#7B8193", "stale": "#7B8193"}
+}
