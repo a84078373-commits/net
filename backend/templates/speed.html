@@ -61,8 +61,11 @@ document.getElementById('run').onclick = async () => {
     }
     const dSec = (performance.now() - d0) / 1000;
     status.textContent = 'رفع…';
+    // crypto.getRandomValues max is 65536 bytes per call
     const payload = new Uint8Array(2 * MIB);
-    crypto.getRandomValues(payload);
+    for (let off = 0; off < payload.length; off += 65536) {
+      crypto.getRandomValues(payload.subarray(off, Math.min(off + 65536, payload.length)));
+    }
     const u0 = performance.now();
     for (let i = 0; i < 2; i++) {
       const r = await api('/api/speed/upload', {
