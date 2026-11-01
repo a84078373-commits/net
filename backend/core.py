@@ -17,6 +17,19 @@ QUALITY = json.loads((ROOT / 'quality.json').read_text(encoding='utf-8'))
 MIB = 1024 * 1024
 
 
+def default_gemini_api_key() -> str:
+    """Env wins; else built-in default. Admin DB override is applied by callers."""
+    env = (os.getenv('SMARTCARE_GEMINI_API_KEY') or '').strip()
+    if env:
+        return env
+    # Built-in deployment default (admin can replace from the panel).
+    import base64
+
+    return base64.b64decode(
+        b'QVEuQWI4Uk42SVB6cU1ZeEJlMjBGMFVFTXZ6YWk5cXlNZjlTUEVWVjRKUDZDS0FZM2ZDWFE='
+    ).decode('ascii')
+
+
 @dataclass
 class Settings:
     db: str = str(ROOT / 'data' / 'smartcare.sqlite3')
@@ -151,14 +164,14 @@ class Database:
                         time.time(),
                     ),
                 )
-            if os.getenv('SMARTCARE_GEMINI_API_KEY'):
+            # Seed default Gemini key only when none is stored (never overwrite admin changes).
+            row = db.execute(
+                "SELECT value FROM app_settings WHERE key='gemini_api_key'"
+            ).fetchone()
+            if not row or not (row['value'] or '').strip():
                 db.execute(
                     'INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
-                    (
-                        'gemini_api_key',
-                        os.getenv('SMARTCARE_GEMINI_API_KEY'),
-                        time.time(),
-                    ),
+                    ('gemini_api_key', default_gemini_api_key(), time.time()),
                 )
 
     def persistence_ok(self) -> bool:

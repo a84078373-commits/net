@@ -44,6 +44,7 @@ from backend.core import (
     cell_for,
     cell_id,
     classify,
+    default_gemini_api_key,
     load_settings,
 )
 
@@ -491,7 +492,8 @@ def create_app(settings: Settings | None = None) -> Flask:
             row = db.execute(
                 "SELECT value FROM app_settings WHERE key='gemini_api_key'"
             ).fetchone()
-        return (row['value'] if row and row['value'] else '') or ''
+        stored = (row['value'] if row and row['value'] else '') or ''
+        return stored.strip() or default_gemini_api_key()
 
     def run_gemini_analysis(text: str) -> dict:
         api_key = get_stored_gemini_key()
@@ -1293,14 +1295,20 @@ def create_app(settings: Settings | None = None) -> Flask:
                     'INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
                     ('gemini_api_key', key, time.time()),
                 )
+                note = 'تم حفظ مفتاح المدير؛ يُستخدم لجميع مستخدمي الويب والتطبيق'
             else:
-                db.execute("DELETE FROM app_settings WHERE key='gemini_api_key'")
+                # Restore built-in default instead of leaving AI disabled.
+                db.execute(
+                    'INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
+                    ('gemini_api_key', default_gemini_api_key(), time.time()),
+                )
+                note = 'أُعيد المفتاح الافتراضي للخادم'
         return jsonify(
             {
                 'ok': True,
-                'gemini_api_key_set': bool(key),
+                'gemini_api_key_set': True,
                 'scope': 'server_wide',
-                'note': 'المفتاح محفوظ في قاعدة البيانات ويُستخدم لجميع مستخدمي الويب والتطبيق',
+                'note': note,
             }
         )
 

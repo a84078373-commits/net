@@ -26,5 +26,6 @@ services:
       # Generated once; do not rotate on each deploy (would invalidate web cookies).
       - key: SMARTCARE_SECRET
         generateValue: true
+      # Optional override; app already seeds a built-in default if unset.
       - key: SMARTCARE_GEMINI_API_KEY
         sync: false
