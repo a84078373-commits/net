@@ -32,9 +32,12 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
       loading = true,
       share = true,
       saving = false,
-      saved = false;
+      saved = false,
+      analyzing = false;
   bool cancelled = false;
   String? error;
+  String? aiAnalysis;
+  String? mappedCellId;
   String phase = 'جاهز للبدء';
   double progress = 0;
   @override
@@ -112,6 +115,9 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
       error = null;
       result = null;
       saved = false;
+      analyzing = false;
+      aiAnalysis = null;
+      mappedCellId = null;
       progress = 0;
     });
     try {
@@ -169,19 +175,73 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
       error = null;
     });
     try {
-      await networkApi.request(
+      final savedRow = await networkApi.request(
         '/api/network-tests',
         method: 'POST',
         body: result!.toJson(share: share),
       );
       if (mounted) {
-        setState(() => saved = true);
+        setState(() {
+          saved = true;
+          mappedCellId = savedRow['shared'] == true
+              ? savedRow['cell_id']?.toString()
+              : null;
+        });
         if (share) widget.onMapped?.call();
       }
+      await analyzeResult();
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     } finally {
       if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> analyzeResult() async {
+    final r = result;
+    if (r == null || analyzing) return;
+    setState(() {
+      analyzing = true;
+      aiAnalysis = null;
+    });
+    try {
+      final prompt = StringBuffer()
+        ..writeln('حلّل نتيجة فحص سرعة شبكة للمستخدم:')
+        ..writeln('- التحميل: ${r.download.toStringAsFixed(1)} Mbps')
+        ..writeln('- الرفع: ${r.upload.toStringAsFixed(1)} Mbps')
+        ..writeln('- البنق: ${r.ping.toStringAsFixed(0)} ms')
+        ..writeln(
+          '- نوع الاتصال: ${r.connection == 'cellular'
+              ? 'شبكة الجوال'
+              : r.connection == 'wifi'
+              ? 'واي فاي'
+              : 'غير مؤكد'}',
+        );
+      if (mappedCellId != null) {
+        prompt.writeln('- رُسم على خلية: $mappedCellId');
+      } else {
+        prompt.writeln('- لم تُشارك إحداثيات على الخريطة');
+      }
+      prompt.writeln(
+        'اذكر تقييمًا مختصرًا وجودة الاستخدام اليومي ونصيحة واحدة عملية.',
+      );
+      final res = await networkApi.request(
+        '/api/ai/analyze',
+        method: 'POST',
+        body: {'text': prompt.toString()},
+      );
+      if (mounted) {
+        setState(() => aiAnalysis = res['analysis']?.toString() ?? 'لا توجد نتيجة');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => aiAnalysis =
+              'تعذر التحليل الذكي: $e\n(تأكد أن المدير حفظ مفتاح Gemini في لوحة الإدارة)',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => analyzing = false);
     }
   }
 
@@ -209,7 +269,7 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'فحص السرعة مسموح على الواي فاي أو شبكة الجوال. بعد الحفظ تُرسم النتيجة على الخريطة.',
+              'فحص السرعة مسموح على الواي فاي أو شبكة الجوال. بعد الحفظ تُرسم على الخريطة (طبقة قياساتك) ويُحلَّل بالذكاء الاصطناعي تلقائيًا.',
               style: TextStyle(color: StcColors.silver, height: 1.7),
             ),
             const SizedBox(height: 20),
@@ -391,9 +451,37 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                             : 'حفظ نتيجة خاصة على الخادم',
                       ),
                     ),
+                    if (mappedCellId != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'رُسم على الخريطة — خلية $mappedCellId (طبقة قياساتك بالأحمر)',
+                        style: const TextStyle(
+                          color: StcColors.purple,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    if (analyzing) ...[
+                      const SizedBox(height: 16),
+                      const Text('جارٍ التحليل الذكي…'),
+                      const SizedBox(height: 8),
+                      const LinearProgressIndicator(),
+                    ],
+                    if (aiAnalysis != null) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'تحليل الذكاء الاصطناعي',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(aiAnalysis!, style: const TextStyle(height: 1.7)),
+                    ],
                     const SizedBox(height: 12),
                     const Text(
-                      'تحديث الخريطة يتطلب الحد الأدنى للعينات ومساهمين متعددين؛ مساهمة واحدة لا تصنّف المنطقة.',
+                      'قياساتك تظهر فورًا في طبقة «قياساتك» على الخريطة. الطبقة العامة تحتاج عينات من عدة مساهمين.',
                       style: TextStyle(
                         fontSize: 11,
                         color: StcColors.silver,
