@@ -33,7 +33,6 @@ flutter run -d chrome
 ## التحقق
 
 ```sh
-python -m pytest backend/test_api.py -q
 flutter analyze
 flutter test
 flutter build web
