@@ -104,7 +104,8 @@ def receive_notification(
 ) -> dict | None:
     """Long-poll one incoming GREEN-API notification. None if the queue is empty."""
     url = f'{api_url.rstrip("/")}/waInstance{id_instance}/receiveNotification/{token_instance}'
-    with httpx.Client(timeout=timeout + 5) as client:
+    # Keep HTTP timeout above receiveTimeout; connection resets are common on long-poll.
+    with httpx.Client(timeout=httpx.Timeout(timeout + 15.0, connect=20.0)) as client:
         res = client.get(url, params={'receiveTimeout': int(timeout)})
     if res.status_code == 400 or not (res.text or '').strip() or res.text.strip() == 'null':
         return None
@@ -129,14 +130,85 @@ def delete_notification(
         client.delete(url)
 
 
+def send_whatsapp_chat(
+    *,
+    api_url: str,
+    id_instance: str,
+    token_instance: str,
+    chat_id: str,
+    message: str,
+    timeout: float = 20.0,
+) -> dict[str, Any]:
+    """POST sendMessage to an exact chatId (e.g. 9665…@c.us)."""
+    url = f'{api_url.rstrip("/")}/waInstance{id_instance}/sendMessage/{token_instance}'
+    with httpx.Client(timeout=timeout) as client:
+        res = client.post(
+            url,
+            json={'chatId': chat_id, 'message': message, 'linkPreview': False},
+            headers={'Content-Type': 'application/json'},
+        )
+    try:
+        payload = res.json()
+    except Exception:
+        payload = {'raw': (res.text or '')[:400]}
+    if res.status_code >= 400:
+        detail = (
+            payload.get('message')
+            or payload.get('error')
+            or payload.get('raw')
+            or f'HTTP {res.status_code}'
+        )
+        raise RuntimeError(str(detail))
+    return payload if isinstance(payload, dict) else {'result': payload}
+
+
+def set_incoming_webhook(
+    *,
+    api_url: str,
+    id_instance: str,
+    token_instance: str,
+    webhook_url: str,
+    timeout: float = 20.0,
+) -> dict[str, Any]:
+    """Point GREEN-API incoming webhooks at our /api/whatsapp/webhook (keeps other settings)."""
+    url = f'{api_url.rstrip("/")}/waInstance{id_instance}/setSettings/{token_instance}'
+    body = {
+        'webhookUrl': (webhook_url or '').strip(),
+        'incomingWebhook': 'yes',
+        'outgoingMessageWebhook': 'no',
+        'outgoingAPIMessageWebhook': 'no',
+        'stateWebhook': 'no',
+        'deviceWebhook': 'no',
+    }
+    with httpx.Client(timeout=timeout) as client:
+        res = client.post(url, json=body, headers={'Content-Type': 'application/json'})
+    try:
+        payload = res.json()
+    except Exception:
+        payload = {'raw': (res.text or '')[:400]}
+    if res.status_code >= 400:
+        raise RuntimeError(str(payload.get('message') or payload.get('raw') or res.status_code))
+    return payload if isinstance(payload, dict) else {'result': payload}
+
+
 def incoming_text(notification: dict) -> tuple[str, str] | None:
-    """Return (chat_id, text) for a private text message, else None."""
-    body = notification.get('body') or {}
+    """Return (chat_id, text) for a private text message, else None.
+
+    Accepts both receiveNotification envelopes ``{body: {...}}`` and raw webhook POSTs.
+    """
+    if not isinstance(notification, dict):
+        return None
+    body = notification.get('body')
+    if not isinstance(body, dict):
+        body = notification
     if body.get('typeWebhook') != 'incomingMessageReceived':
         return None
     sender = (body.get('senderData') or {}).get('chatId') or ''
-    if not sender.endswith('@c.us'):
+    # Prefer classic WhatsApp ids; also accept @s.whatsapp.net if GREEN ever sends it.
+    if not (sender.endswith('@c.us') or sender.endswith('@s.whatsapp.net')):
         return None
+    if sender.endswith('@s.whatsapp.net'):
+        sender = sender.replace('@s.whatsapp.net', '@c.us')
     msg = body.get('messageData') or {}
     kind = msg.get('typeMessage')
     text = ''

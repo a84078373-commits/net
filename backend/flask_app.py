@@ -56,7 +56,9 @@ from backend.green_api import (
     incoming_text,
     otp_message_ar,
     receive_notification,
+    send_whatsapp_chat,
     send_whatsapp_text,
+    set_incoming_webhook,
 )
 from backend.twin import (
     build_planning_towers,
@@ -2994,10 +2996,22 @@ def create_app(settings: Settings | None = None) -> Flask:
         if len(digits) < 8:
             return None
         candidates = [digits]
-        if digits.startswith('966') and len(digits) >= 12:
-            candidates.append('0' + digits[3:])
+        # Common GCC / MENA storage forms (local leading 0).
+        for dial in ('966', '967', '971', '965', '973', '974', '968', '20', '962', '964'):
+            if digits.startswith(dial) and len(digits) > len(dial) + 6:
+                national = digits[len(dial) :]
+                candidates.append(national)
+                candidates.append('0' + national)
+        # Last 9 digits fallback (SA mobiles).
+        if len(digits) >= 9:
+            candidates.append('0' + digits[-9:])
+            candidates.append(digits[-9:])
+        seen = set()
         with database.connect() as db:
             for phone in candidates:
+                if not phone or phone in seen:
+                    continue
+                seen.add(phone)
                 row = db.execute(
                     'SELECT id, phone, name, country_code FROM users WHERE phone=?',
                     (phone,),
@@ -3124,25 +3138,66 @@ def create_app(settings: Settings | None = None) -> Flask:
         return None
 
     def handle_whatsapp_incoming(chat_id: str, text: str):
-        user = find_user_by_whatsapp_chat(chat_id)
-        if not user:
-            return
         cfg_wa = whatsapp_otp_config()
         if not cfg_wa.get('enabled'):
             return
+        user = find_user_by_whatsapp_chat(chat_id)
+        if not user:
+            print(f'[smartcare] whatsapp: unknown sender {chat_id}', flush=True)
+            return
         reply = whatsapp_reply_for_user(user, text)
         if not reply:
+            print(
+                f'[smartcare] whatsapp: no intent match for {user["phone"]}: {text[:80]!r}',
+                flush=True,
+            )
             return
-        send_whatsapp_text(
+        send_whatsapp_chat(
             api_url=cfg_wa['api_url'],
             id_instance=cfg_wa['id_instance'],
             token_instance=cfg_wa['token_instance'],
-            phone=user['phone'],
-            country_iso=user['country_code'] or 'SA',
+            chat_id=chat_id,
             message=reply,
         )
+        print(f'[smartcare] whatsapp: replied to {user["phone"]}', flush=True)
+
+    @app.post('/api/whatsapp/webhook')
+    def whatsapp_webhook():
+        """GREEN-API incoming webhook (does not touch stored Gemini/GREEN credentials)."""
+        payload = request.get_json(silent=True) or {}
+        parsed = incoming_text(payload)
+        if parsed:
+            chat_id, text = parsed
+            try:
+                handle_whatsapp_incoming(chat_id, text)
+            except Exception as exc:
+                print(f'[smartcare] whatsapp webhook reply skipped: {exc}', flush=True)
+        return ('', 200)
+
+    def sync_green_webhook_url():
+        """Point GREEN instance webhook at this deployment when we have a public HTTPS origin."""
+        cfg_wa = whatsapp_otp_config()
+        if not cfg_wa.get('enabled'):
+            return
+        origin = (cfg.public_origin or '').strip().rstrip('/')
+        if not origin.startswith('https://'):
+            return
+        if any(x in origin for x in ('localhost', '127.0.0.1', '0.0.0.0')):
+            return
+        webhook = origin + '/api/whatsapp/webhook'
+        try:
+            set_incoming_webhook(
+                api_url=cfg_wa['api_url'],
+                id_instance=cfg_wa['id_instance'],
+                token_instance=cfg_wa['token_instance'],
+                webhook_url=webhook,
+            )
+            print(f'[smartcare] GREEN webhook -> {webhook}', flush=True)
+        except Exception as exc:
+            print(f'[smartcare] GREEN webhook sync skipped: {exc}', flush=True)
 
     def whatsapp_inbox_loop():
+        failures = 0
         while True:
             try:
                 cfg_wa = whatsapp_otp_config()
@@ -3153,8 +3208,9 @@ def create_app(settings: Settings | None = None) -> Flask:
                     api_url=cfg_wa['api_url'],
                     id_instance=cfg_wa['id_instance'],
                     token_instance=cfg_wa['token_instance'],
-                    timeout=20,
+                    timeout=15,
                 )
+                failures = 0
                 if not note:
                     continue
                 receipt = note.get('receiptId')
@@ -3166,17 +3222,25 @@ def create_app(settings: Settings | None = None) -> Flask:
                     except Exception as exc:
                         print(f'[smartcare] whatsapp reply skipped: {exc}', flush=True)
                 if receipt is not None:
-                    delete_notification(
-                        api_url=cfg_wa['api_url'],
-                        id_instance=cfg_wa['id_instance'],
-                        token_instance=cfg_wa['token_instance'],
-                        receipt_id=receipt,
-                    )
+                    try:
+                        delete_notification(
+                            api_url=cfg_wa['api_url'],
+                            id_instance=cfg_wa['id_instance'],
+                            token_instance=cfg_wa['token_instance'],
+                            receipt_id=receipt,
+                        )
+                    except Exception as exc:
+                        print(f'[smartcare] whatsapp delete skipped: {exc}', flush=True)
             except Exception as exc:
-                print(f'[smartcare] whatsapp inbox: {exc}', flush=True)
-                time.sleep(8)
+                failures += 1
+                wait = min(60, 5 * failures)
+                print(f'[smartcare] whatsapp inbox: {exc} (retry in {wait}s)', flush=True)
+                time.sleep(wait)
 
     if not cfg.testing and os.getenv('WERKZEUG_RUN_MAIN') != 'false':
+        threading.Thread(
+            target=sync_green_webhook_url, name='wa-webhook-sync', daemon=True
+        ).start()
         threading.Thread(
             target=whatsapp_inbox_loop, name='wa-inbox', daemon=True
         ).start()
