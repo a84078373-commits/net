@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'care_screens.dart';
+import 'l10n/app_localizations.dart';
 import 'network/network_api.dart';
 import 'network/network_test_screen.dart';
 import 'network_map.dart';
 import 'theme.dart';
+import 'widgets/language_switcher.dart';
 
 /// Splash matching official mystc purple + centered stc mark.
 class MystcSplash extends StatefulWidget {
@@ -30,12 +32,13 @@ class _MystcSplashState extends State<MystcSplash> {
 }
 
 void _lookOnly(BuildContext context) {
+  final l10n = context.l10n;
   ScaffoldMessenger.of(context).clearSnackBars();
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('هذا العنصر للعرض فقط • الخدمات الفعلية: فحص السرعة وخريطة الجودة'),
+    SnackBar(
+      content: Text(l10n.demoOnlySnack),
       behavior: SnackBarBehavior.floating,
-      duration: Duration(seconds: 2),
+      duration: const Duration(seconds: 2),
     ),
   );
 }
@@ -53,6 +56,7 @@ class MystcHomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     const searchH = 48.0;
     const overlap = 24.0;
     return CustomScrollView(
@@ -73,10 +77,10 @@ class MystcHomeTab extends StatelessWidget {
                       20,
                       overlap + 16,
                     ),
-                    child: const Text(
-                      'مرحبا بكم في stc',
+                    child: Text(
+                      l10n.welcomeToStc,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
@@ -97,10 +101,10 @@ class MystcHomeTab extends StatelessWidget {
                         child: Row(
                           children: [
                             const SizedBox(width: 14),
-                            const Expanded(
+                            Expanded(
                               child: Text(
-                                'ما الذي تبحث عنه؟',
-                                style: TextStyle(
+                                l10n.searchPlaceholder,
+                                style: const TextStyle(
                                   color: Color(0xFF9AA0A6),
                                   fontSize: 15,
                                 ),
@@ -138,13 +142,13 @@ class MystcHomeTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
           sliver: SliverList.list(
             children: [
-              const _SectionTitle('استكشف منتجاتنا'),
+              _SectionTitle(l10n.exploreProducts),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: _ProductShot(
-                      title: 'حول رقمك إلى stc',
+                      title: l10n.productNumberTransfer,
                       image: 'assets/brand/product_transfer.jpg',
                       onTap: () => _lookOnly(context),
                     ),
@@ -152,7 +156,7 @@ class MystcHomeTab extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _ProductShot(
-                      title: 'شريحة جوال وإنترنت',
+                      title: l10n.productSimInternet,
                       image: 'assets/brand/product_sim.jpg',
                       onTap: () => _lookOnly(context),
                     ),
@@ -160,7 +164,7 @@ class MystcHomeTab extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 22),
-              const _SectionTitle('انضم إلى stc'),
+              _SectionTitle(l10n.joinStc),
               const SizedBox(height: 12),
               Material(
                 color: const Color(0xFF1BCED8),
@@ -189,10 +193,10 @@ class MystcHomeTab extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 14),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'الإنترنت المنزلي',
-                            style: TextStyle(
+                            l10n.homeInternet,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
@@ -205,14 +209,14 @@ class MystcHomeTab extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 22),
-              const _SectionTitle('إجراءات سريعة'),
+              _SectionTitle(l10n.quickActions),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: _QuickAction(
                       icon: Icons.credit_card_outlined,
-                      label: 'إعادة شحن الرقم',
+                      label: l10n.quickRecharge,
                       onTap: () => _lookOnly(context),
                     ),
                   ),
@@ -220,7 +224,7 @@ class MystcHomeTab extends StatelessWidget {
                   Expanded(
                     child: _QuickAction(
                       icon: Icons.description_outlined,
-                      label: 'ترقية إلى مفوتر',
+                      label: l10n.quickUpgradePostpaid,
                       onTap: () => _lookOnly(context),
                     ),
                   ),
@@ -228,7 +232,7 @@ class MystcHomeTab extends StatelessWidget {
                   Expanded(
                     child: _QuickAction(
                       icon: Icons.view_in_ar_outlined,
-                      label: 'طلباتي',
+                      label: l10n.quickMyOrders,
                       color: const Color(0xFF2ECC71),
                       onTap: () => _lookOnly(context),
                     ),
@@ -238,12 +242,12 @@ class MystcHomeTab extends StatelessWidget {
               const SizedBox(height: 22),
               Row(
                 children: [
-                  const Expanded(
-                    child: _SectionTitle('ادفع برقمك', pad: false),
+                  Expanded(
+                    child: _SectionTitle(l10n.payWithNumber, pad: false),
                   ),
                   TextButton(
                     onPressed: () => _lookOnly(context),
-                    child: const Text('إظهار الكل'),
+                    child: Text(l10n.showAll),
                   ),
                 ],
               ),
@@ -279,7 +283,7 @@ class MystcHomeTab extends StatelessWidget {
                         child: FilledButton.icon(
                           onPressed: onSpeed,
                           icon: const Icon(Icons.speed),
-                          label: const Text('فحص السرعة'),
+                          label: Text(l10n.speedTest),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -287,7 +291,7 @@ class MystcHomeTab extends StatelessWidget {
                         child: OutlinedButton.icon(
                           onPressed: onMap,
                           icon: const Icon(Icons.map_outlined),
-                          label: const Text('الخريطة'),
+                          label: Text(l10n.map),
                         ),
                       ),
                     ],
@@ -400,74 +404,82 @@ class _PayLogo extends StatelessWidget {
 class _ReportsPage extends StatelessWidget {
   const _ReportsPage();
   @override
-  Widget build(BuildContext context) => CarePage(
-    title: 'بلاغاتي',
-    children: [
-      ReportsPanel(onNew: () => openCare(context, const NewReportScreen())),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return CarePage(
+      title: l10n.myReports,
+      children: [
+        ReportsPanel(onNew: () => openCare(context, const NewReportScreen())),
+      ],
+    );
+  }
 }
 
 class MystcStoreTab extends StatelessWidget {
   const MystcStoreTab({super.key});
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Container(
-        width: double.infinity,
-        color: StcColors.purple,
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-        child: const Row(
-          children: [
-            Expanded(
-              child: Text(
-                'المتجر',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          color: StcColors.purple,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.navStore,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-            Icon(Icons.search, color: Colors.white),
-          ],
+              const Icon(Icons.search, color: Colors.white),
+            ],
+          ),
         ),
-      ),
-      const Expanded(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
-          child: RealSpeedPanel(),
+        const Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: RealSpeedPanel(),
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class MystcQitafTab extends StatelessWidget {
   const MystcQitafTab({super.key});
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Container(
-        width: double.infinity,
-        color: StcColors.purple,
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-        child: const Row(
-          children: [
-            Expanded(
-              child: Text(
-                'قطاف_qitaf',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          color: StcColors.purple,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.qitafHeaderTitle,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-            Icon(Icons.search, color: Colors.white),
-          ],
+              const Icon(Icons.search, color: Colors.white),
+            ],
+          ),
         ),
-      ),
       Expanded(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -481,14 +493,14 @@ class MystcQitafTab extends StatelessWidget {
                 ),
               ),
               padding: const EdgeInsets.all(18),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  StcWordmark(size: 22),
-                  Spacer(),
+                  const StcWordmark(size: 22),
+                  const Spacer(),
                   Text(
-                    'قيس شبكتك وارسم الجودة على خريطة حائل',
-                    style: TextStyle(
+                    l10n.qitafHeroTagline,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -510,15 +522,18 @@ class MystcQitafTab extends StatelessWidget {
             const SizedBox(height: 18),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'عروض قطاف',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    l10n.qitafOffers,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 TextButton(
                   onPressed: () {},
-                  child: const Text('عرض الكل'),
+                  child: Text(l10n.showAll),
                 ),
               ],
             ),
@@ -526,17 +541,29 @@ class MystcQitafTab extends StatelessWidget {
               height: 150,
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                children: const [
-                  _OfferCard('فحص السرعة', 'قياس فعلي', 'مجاني'),
-                  _OfferCard('خريطة الجودة', 'خلايا حائل', 'مباشر'),
-                  _OfferCard('سجل القياسات', 'نتائجك', 'خاص'),
+                children: [
+                  _OfferCard(
+                    l10n.speedTest,
+                    l10n.offerSpeedSubtitle,
+                    l10n.badgeFree,
+                  ),
+                  _OfferCard(
+                    l10n.offerMapTitle,
+                    l10n.offerMapSubtitle,
+                    l10n.badgeLive,
+                  ),
+                  _OfferCard(
+                    l10n.measurementHistory,
+                    l10n.offerHistorySubtitle,
+                    l10n.badgePrivate,
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 18),
-            const Text(
-              'خريطة التغطية',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            Text(
+              l10n.coverageMap,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
             ClipRRect(
@@ -549,8 +576,9 @@ class MystcQitafTab extends StatelessWidget {
           ],
         ),
       ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class MystcMoreTab extends StatelessWidget {
@@ -560,27 +588,28 @@ class MystcMoreTab extends StatelessWidget {
     return AnimatedBuilder(
       animation: networkApi,
       builder: (context, _) {
+        final l10n = context.l10n;
         final signedIn = networkApi.token != null;
         final admin = networkApi.isAdmin;
         final items = <(IconData, String, VoidCallback)>[
           (
             Icons.admin_panel_settings_outlined,
-            admin ? 'لوحة تحكم المدير' : 'لوحة الإدارة (دخول المدير)',
+            admin ? l10n.adminDashboard : l10n.adminPanelGuest,
             () => openCare(context, const AdminScreen()),
           ),
           (
             Icons.auto_awesome,
-            'مساعد التحليل الذكي',
+            l10n.aiAssistTitle,
             () => openCare(context, const AiAssistScreen()),
           ),
           (
             Icons.sim_card_outlined,
-            'فحص سرعة الشبكة',
+            l10n.networkSpeedTest,
             () => openCare(context, const NetworkTestScreen()),
           ),
           (
             Icons.map_outlined,
-            'خريطة الجودة',
+            l10n.qualityMap,
             () => openCare(
               context,
               const Scaffold(body: SafeArea(child: NetworkMap(selectedArea: 0))),
@@ -588,32 +617,32 @@ class MystcMoreTab extends StatelessWidget {
           ),
           (
             Icons.history_rounded,
-            'سجل القياسات',
+            l10n.measurementHistory,
             () => openCare(context, const HistoryScreen()),
           ),
           (
             Icons.receipt_long_outlined,
-            'بلاغاتي',
+            l10n.myReports,
             () => openCare(context, const _ReportsPage()),
           ),
           (
             Icons.headset_mic_outlined,
-            'تواصل معنا',
+            l10n.contactUs,
             () => openCare(context, const HelpScreen()),
           ),
           (
             Icons.badge_outlined,
-            'ملفي الشخصي',
+            l10n.myProfile,
             () => openCare(context, const ProfileScreen()),
           ),
           (
             Icons.info_outline,
-            'عن SmartCare',
+            l10n.aboutSmartCare,
             () => openCare(context, const PrivacyScreen()),
           ),
           (
             Icons.tune_rounded,
-            'الإعدادات',
+            l10n.settings,
             () => openCare(context, const SettingsScreen()),
           ),
         ];
@@ -643,15 +672,17 @@ class MystcMoreTab extends StatelessWidget {
               const SizedBox(height: 14),
               Text(
                 admin
-                    ? (networkApi.user?['name']?.toString() ?? 'مدير النظام')
-                    : 'مرحبا بكم في stc',
+                    ? (networkApi.user?['name']?.toString() ?? l10n.systemAdmin)
+                    : l10n.welcomeToStc,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
               ),
               if (admin) ...[
                 const SizedBox(height: 6),
                 Text(
-                  '${networkApi.user?['phone'] ?? ''} • صلاحية مدير كاملة',
+                  l10n.adminFullAccessSubtitle(
+                    networkApi.user?['phone']?.toString() ?? '',
+                  ),
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: StcColors.silver, fontSize: 13),
                 ),
@@ -666,35 +697,35 @@ class MystcMoreTab extends StatelessWidget {
                     child: InkWell(
                       onTap: () => openCare(context, const AdminScreen()),
                       borderRadius: BorderRadius.circular(12),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 18,
                         ),
                         child: Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.dashboard_customize_outlined,
                               color: Colors.white,
                               size: 28,
                             ),
-                            SizedBox(width: 12),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'افتح لوحة التحكم الكاملة',
-                                    style: TextStyle(
+                                    l10n.openFullAdminPanel,
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w800,
                                       fontSize: 16,
                                     ),
                                   ),
-                                  SizedBox(height: 4),
+                                  const SizedBox(height: 4),
                                   Text(
-                                    'مستخدمون • قياسات • Gemini • حالة الخادم',
-                                    style: TextStyle(
+                                    l10n.adminPanelBlurb,
+                                    style: const TextStyle(
                                       color: Color(0xFFD4B8F0),
                                       fontSize: 12,
                                     ),
@@ -702,7 +733,11 @@ class MystcMoreTab extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 16),
+                            const Icon(
+                              Icons.arrow_back_ios_new,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                           ],
                         ),
                       ),
@@ -740,9 +775,9 @@ class MystcMoreTab extends StatelessWidget {
                             child: Text(
                               signedIn
                                   ? (admin
-                                      ? 'جلسة مدير نشطة • اضغط لإدارة الحساب'
-                                      : 'أنت متصل بحساب القياس')
-                                  : 'سجّل دخول المدير: 0552515874',
+                                      ? l10n.adminSessionActive
+                                      : l10n.measurementAccountSignedIn)
+                                  : l10n.adminLoginHintPhone,
                               style: const TextStyle(
                                 color: StcColors.coral,
                                 fontWeight: FontWeight.w700,
@@ -757,16 +792,19 @@ class MystcMoreTab extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
-                    Icon(Icons.search, color: StcColors.silver),
-                    SizedBox(width: 10),
+                    const Icon(Icons.search, color: StcColors.silver),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'ما الذي تبحث عنه؟',
-                        style: TextStyle(color: StcColors.silver, fontSize: 15),
+                        l10n.searchPlaceholder,
+                        style: const TextStyle(
+                          color: StcColors.silver,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                   ],
@@ -793,6 +831,10 @@ class MystcMoreTab extends StatelessWidget {
                         ),
                         onTap: item.$3,
                       ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 8, 20, 16),
+                      child: LanguageSwitcher(compact: true),
+                    ),
                   ],
                 ),
               ),

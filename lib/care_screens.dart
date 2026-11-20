@@ -1,35 +1,89 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_store.dart';
+import 'l10n/app_localizations.dart';
 import 'network/server_auth_screen.dart';
 import 'network/network_test_screen.dart';
 import 'network/network_api.dart';
 import 'theme.dart';
+import 'widgets/language_switcher.dart';
 
 const _purple = StcColors.purple, _mint = StcColors.oasis;
+const _reportCategoryKeys = ['slow', 'weak', 'dropped', 'unstable'];
+const _statusPending = 'بانتظار الربط';
+const _statusClosedDemo = 'مغلق تجريبيًا';
+
 void openCare(BuildContext context, Widget screen) =>
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            Directionality(textDirection: TextDirection.rtl, child: screen),
-      ),
-    );
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+
+String areaLabel(AppLocalizations l10n, String key) {
+  switch (normalizeAreaKey(key)) {
+    case 'naqrah':
+      return l10n.neighborhoodNaqrah;
+    case 'jamiin':
+      return l10n.neighborhoodJamiin;
+    case 'central':
+      return l10n.neighborhoodCentralHail;
+    default:
+      return l10n.neighborhoodMuntazah;
+  }
+}
+
+String normalizeCategoryKey(String value) {
+  const legacy = {
+    'بطء الإنترنت': 'slow',
+    'Slow internet': 'slow',
+    'ضعف الإشارة': 'weak',
+    'Weak signal': 'weak',
+    'انقطاع المكالمات': 'dropped',
+    'Dropped calls': 'dropped',
+    'اتصال غير مستقر': 'unstable',
+    'Unstable connection': 'unstable',
+  };
+  if (_reportCategoryKeys.contains(value)) return value;
+  return legacy[value] ?? 'slow';
+}
+
+String categoryLabel(AppLocalizations l10n, String key) {
+  switch (normalizeCategoryKey(key)) {
+    case 'weak':
+      return l10n.reportCategoryWeakSignal;
+    case 'dropped':
+      return l10n.reportCategoryDroppedCalls;
+    case 'unstable':
+      return l10n.reportCategoryUnstable;
+    default:
+      return l10n.reportCategorySlowInternet;
+  }
+}
+
+bool isReportClosedStatus(String status) => status == _statusClosedDemo;
+
+String reportStatusLabel(AppLocalizations l10n, String status) {
+  if (isReportClosedStatus(status)) return l10n.reportStatusClosedDemo;
+  if (status == _statusPending) return l10n.reportStatusPending;
+  return status;
+}
+
 void toast(BuildContext context, String text) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
 class CarePage extends StatelessWidget {
-  final String title, eyebrow;
+  final String title;
+  final String? eyebrow;
   final List<Widget> children;
   final List<Widget>? actions;
   const CarePage({
     super.key,
     required this.title,
-    this.eyebrow = 'SMARTCARE / حائل',
+    this.eyebrow,
     required this.children,
     this.actions,
   });
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Scaffold(
     appBar: AppBar(title: Text(title), actions: actions),
     body: SafeArea(
       child: SingleChildScrollView(
@@ -41,7 +95,7 @@ class CarePage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  eyebrow,
+                  eyebrow ?? l10n.eyebrowSmartcareHail,
                   style: const TextStyle(
                     color: StcColors.coral,
                     fontSize: 11,
@@ -67,6 +121,7 @@ class CarePage extends StatelessWidget {
       ),
     ),
   );
+  }
 }
 
 class CareCard extends StatelessWidget {
@@ -145,20 +200,25 @@ class MoreScreen extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: appStore,
     builder: (_, __) {
+      final l10n = context.l10n;
       final items = <(IconData, String, Widget)>[
-        (Icons.person_outline, 'الملف الشخصي', const ProfileScreen()),
-        (Icons.history, 'سجل القياسات', const HistoryScreen()),
-        (Icons.notifications_none, 'الإشعارات', const NoticesScreen()),
-        (Icons.cloud_sync_outlined, 'الحفظ والمزامنة', const SyncScreen()),
-        (Icons.tune, 'الإعدادات', const SettingsScreen()),
+        (Icons.person_outline, l10n.profile, const ProfileScreen()),
+        (Icons.history, l10n.measurementHistory, const HistoryScreen()),
+        (Icons.notifications_none, l10n.notifications, const NoticesScreen()),
+        (Icons.cloud_sync_outlined, l10n.saveAndSync, const SyncScreen()),
+        (Icons.tune, l10n.settings, const SettingsScreen()),
         if (networkApi.isAdmin)
-          (Icons.admin_panel_settings_outlined, 'لوحة الإدارة', const AdminScreen()),
-        (Icons.help_outline, 'المساعدة', const HelpScreen()),
-        (Icons.privacy_tip_outlined, 'الخصوصية', const PrivacyScreen()),
+          (
+            Icons.admin_panel_settings_outlined,
+            l10n.adminPanel,
+            const AdminScreen(),
+          ),
+        (Icons.help_outline, l10n.help, const HelpScreen()),
+        (Icons.privacy_tip_outlined, l10n.privacy, const PrivacyScreen()),
       ];
       return CarePage(
-        title: 'المزيد',
-        eyebrow: 'APP CENTER',
+        title: l10n.navMore,
+        eyebrow: l10n.eyebrowAppCenter,
         children: [
           CareCard(
             Row(
@@ -175,8 +235,8 @@ class MoreScreen extends StatelessWidget {
                       titleText(appStore.name),
                       muted(
                         appStore.signedIn
-                            ? 'حساب SmartCare • الجلسة على الخادم'
-                            : 'تصفح كزائر • كل الخدمات في متناولك',
+                            ? l10n.accountServerSession
+                            : l10n.guestBrowseBlurb,
                       ),
                     ],
                   ),
@@ -184,7 +244,7 @@ class MoreScreen extends StatelessWidget {
               ],
             ),
           ),
-          titleText('مركز التطبيقات'),
+          titleText(l10n.appCenter),
           const SizedBox(height: 14),
           GridView.count(
             crossAxisCount: 3,
@@ -205,7 +265,7 @@ class MoreScreen extends StatelessWidget {
           const SizedBox(height: 20),
           if (!appStore.signedIn)
             actionButton(
-              'تسجيل الدخول / إنشاء حساب',
+              l10n.signInOrRegister,
               () => openCare(context, const AuthScreen()),
               icon: Icons.login,
             ),
@@ -229,7 +289,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   late final name = TextEditingController(text: appStore.name);
-  late String area = appStore.area;
+  late String area = normalizeAreaKey(appStore.area);
   final form = GlobalKey<FormState>();
   @override
   void dispose() {
@@ -238,56 +298,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => CarePage(
-    title: 'ملفي الشخصي',
-    children: [
-      const Center(
-        child: StcProfileAvatar(radius: 46, backgroundColor: Colors.white),
-      ),
-      const SizedBox(height: 24),
-      CareCard(
-        Form(
-          key: form,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: name,
-                decoration: const InputDecoration(labelText: 'الاسم'),
-                validator: (v) =>
-                    (v ?? '').trim().length < 2 ? 'اكتب اسمك' : null,
-              ),
-              const SizedBox(height: 20),
-              DropdownButtonFormField<String>(
-                initialValue: area,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'الحي المفضل'),
-                items: neighborhoods
-                    .map((a) => DropdownMenuItem(value: a, child: Text(a)))
-                    .toList(),
-                onChanged: (v) => area = v!,
-              ),
-              const SizedBox(height: 20),
-              muted(
-                appStore.phone.isEmpty
-                    ? 'تصفح كزائر'
-                    : 'رقم الجوال: ${appStore.phone}',
-              ),
-              const SizedBox(height: 20),
-              actionButton('حفظ التعديلات', () {
-                if (!form.currentState!.validate()) return;
-                appStore.name = name.text.trim();
-                appStore.area = area;
-                appStore.changed();
-                toast(context, 'تم تحديث ملفك الشخصي');
-              }, icon: Icons.check),
-            ],
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return CarePage(
+      title: l10n.myProfile,
+      children: [
+        const Center(
+          child: StcProfileAvatar(radius: 46, backgroundColor: Colors.white),
+        ),
+        const SizedBox(height: 24),
+        CareCard(
+          Form(
+            key: form,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: name,
+                  decoration: InputDecoration(labelText: l10n.nameLabel),
+                  validator: (v) => (v ?? '').trim().length < 2
+                      ? l10n.nameValidationMin
+                      : null,
+                ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  initialValue: area,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.preferredNeighborhood,
+                  ),
+                  items: neighborhoodKeys
+                      .map(
+                        (key) => DropdownMenuItem(
+                          value: key,
+                          child: Text(areaLabel(l10n, key)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => area = v!,
+                ),
+                const SizedBox(height: 20),
+                muted(
+                  appStore.phone.isEmpty
+                      ? l10n.browsingAsGuest
+                      : l10n.mobileNumberLine(appStore.phone),
+                ),
+                const SizedBox(height: 20),
+                actionButton(l10n.saveChanges, () {
+                  if (!form.currentState!.validate()) return;
+                  appStore.name = name.text.trim();
+                  appStore.area = area;
+                  appStore.changed();
+                  toast(context, l10n.profileUpdatedToast);
+                }, icon: Icons.check),
+              ],
+            ),
           ),
         ),
-      ),
-      muted('بيانات الملف مرتبطة بهذا المتصفح أو الجهاز في النسخة التجريبية.'),
-    ],
-  );
+        muted(l10n.profileLocalBetaNote),
+      ],
+    );
+  }
 }
 
 class SettingsScreen extends StatelessWidget {
@@ -295,84 +366,80 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: appStore,
-    builder: (_, __) => CarePage(
-      title: 'الإعدادات',
-      children: [
-        CareCard(
-          Column(
-            children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('إشعارات داخل التطبيق'),
-                subtitle: muted('تحديثات البلاغات والقياسات داخل التطبيق'),
-                value: appStore.notifications,
-                onChanged: (v) {
-                  appStore.notifications = v;
-                  appStore.changed();
-                },
-              ),
-              const Divider(),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('الحفظ التلقائي على الجهاز'),
-                subtitle: muted(
-                  'احفظ البيانات بعد كل تعديل؛ عند إيقافه استخدم الحفظ اليدوي',
+    builder: (_, __) {
+      final l10n = context.l10n;
+      return CarePage(
+        title: l10n.settings,
+        children: [
+          CareCard(
+            Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(l10n.inAppNotifications),
+                  subtitle: muted(l10n.inAppNotificationsSubtitle),
+                  value: appStore.notifications,
+                  onChanged: (v) {
+                    appStore.notifications = v;
+                    appStore.changed();
+                  },
                 ),
-                value: appStore.autoSave,
-                onChanged: (v) async {
-                  appStore.autoSave = v;
-                  await appStore.save();
-                },
-              ),
-            ],
+                const Divider(),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(l10n.autoSaveOnDevice),
+                  subtitle: muted(l10n.autoSaveSubtitle),
+                  value: appStore.autoSave,
+                  onChanged: (v) async {
+                    appStore.autoSave = v;
+                    await appStore.save();
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
-        CareCard(
-          Column(
-            children: [
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.language, color: _mint),
-                title: Text('اللغة'),
-                trailing: Text('العربية'),
-              ),
-              const Divider(),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.light_mode_outlined, color: _mint),
-                title: Text('المظهر'),
-                trailing: Text('فاتح • هوية stc'),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.privacy_tip_outlined, color: _mint),
-                title: const Text('الخصوصية وبياناتك'),
-                trailing: const Icon(Icons.chevron_left),
-                onTap: () => openCare(context, const PrivacyScreen()),
-              ),
-            ],
+          const CareCard(LanguageSwitcher()),
+          CareCard(
+            Column(
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.light_mode_outlined, color: _mint),
+                  title: Text(l10n.appearance),
+                  trailing: Text(l10n.appearanceLightStc),
+                ),
+                const Divider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.privacy_tip_outlined, color: _mint),
+                  title: Text(l10n.privacyAndData),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => openCare(context, const PrivacyScreen()),
+                ),
+              ],
+            ),
           ),
-        ),
-        actionButton(
-          'الحفظ والمزامنة',
-          () => openCare(context, const SyncScreen()),
-          icon: Icons.cloud_sync_outlined,
-        ),
-        const SizedBox(height: 16),
-        if (appStore.signedIn)
-          OutlinedButton.icon(
-            onPressed: () async {
-              await networkApi.signOut();
-              if (!context.mounted) return;
-              appStore.signOut();
-              Navigator.pop(context);
-              toast(context, 'تم تسجيل الخروج من هذا الجهاز');
-            },
-            icon: const Icon(Icons.logout),
-            label: const Text('تسجيل الخروج'),
+          actionButton(
+            l10n.saveAndSync,
+            () => openCare(context, const SyncScreen()),
+            icon: Icons.cloud_sync_outlined,
           ),
-      ],
-    ),
+          const SizedBox(height: 16),
+          if (appStore.signedIn)
+            OutlinedButton.icon(
+              onPressed: () async {
+                await networkApi.signOut();
+                if (!context.mounted) return;
+                appStore.signOut();
+                Navigator.pop(context);
+                toast(context, l10n.signedOutToast);
+              },
+              icon: const Icon(Icons.logout),
+              label: Text(l10n.signOut),
+            ),
+        ],
+      );
+    },
   );
 }
 
@@ -384,48 +451,53 @@ class ReportsPanel extends StatefulWidget {
 }
 
 class _ReportsPanelState extends State<ReportsPanel> {
-  String filter = 'الكل';
+  String filter = 'all';
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: appStore,
     builder: (_, __) {
+      final l10n = context.l10n;
       final reports = appStore.reports
           .where(
             (r) =>
-                filter == 'الكل' ||
-                (filter == 'مغلقة'
-                    ? r.status == 'مغلق تجريبيًا'
-                    : r.status != 'مغلق تجريبيًا'),
+                filter == 'all' ||
+                (filter == 'closed'
+                    ? isReportClosedStatus(r.status)
+                    : !isReportClosedStatus(r.status)),
           )
           .toList();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'بلاغاتي',
-            style: TextStyle(
+          Text(
+            l10n.myReports,
+            style: const TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w800,
               color: StcColors.onyx,
             ),
           ),
           const SizedBox(height: 8),
-          muted('محفوظة على هذا الجهاز • لم تُرسل إلى STC'),
+          muted(l10n.reportsLocalNotStc),
           const SizedBox(height: 18),
           actionButton(
-            'إنشاء بلاغ جديد',
+            l10n.createNewReport,
             () => openCare(context, const NewReportScreen()),
             icon: Icons.add,
           ),
           const SizedBox(height: 16),
           Wrap(
             spacing: 8,
-            children: ['الكل', 'مفتوحة', 'مغلقة']
+            children: [
+              ('all', l10n.filterAll),
+              ('open', l10n.filterOpen),
+              ('closed', l10n.filterClosed),
+            ]
                 .map(
                   (f) => ChoiceChip(
-                    label: Text(f),
-                    selected: filter == f,
-                    onSelected: (_) => setState(() => filter = f),
+                    label: Text(f.$2),
+                    selected: filter == f.$1,
+                    onSelected: (_) => setState(() => filter = f.$1),
                   ),
                 )
                 .toList(),
@@ -434,8 +506,8 @@ class _ReportsPanelState extends State<ReportsPanel> {
           if (reports.isEmpty)
             emptyState(
               Icons.task_alt,
-              'لا توجد بلاغات هنا',
-              'أضف بلاغًا أو جرّب اختيار حالة أخرى.',
+              l10n.reportsEmptyTitle,
+              l10n.reportsEmptyBody,
             ),
           for (final r in reports)
             CareCard(
@@ -454,7 +526,7 @@ class _ReportsPanelState extends State<ReportsPanel> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            r.category,
+                            categoryLabel(l10n, r.category),
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -468,13 +540,15 @@ class _ReportsPanelState extends State<ReportsPanel> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 10),
-                    muted('${r.area} • ${dateLabel(r.created)}'),
+                    muted(
+                      '${areaLabel(l10n, r.area)} • ${dateLabel(r.created)}',
+                    ),
                     const SizedBox(height: 8),
                     Text(
-                      r.status,
+                      reportStatusLabel(l10n, r.status),
                       style: const TextStyle(color: _mint, fontSize: 12),
                     ),
-                    muted('لم يُرسل إلى STC'),
+                    muted(l10n.notSentToStc),
                   ],
                 ),
               ),
@@ -482,7 +556,7 @@ class _ReportsPanelState extends State<ReportsPanel> {
           TextButton.icon(
             onPressed: widget.onNew,
             icon: const Icon(Icons.auto_awesome),
-            label: const Text('ابدأ بتشخيص المشكلة أولًا'),
+            label: Text(l10n.diagnoseFirst),
           ),
         ],
       );
@@ -499,7 +573,8 @@ class NewReportScreen extends StatefulWidget {
 class _NewReportScreenState extends State<NewReportScreen> {
   final text = TextEditingController();
   final form = GlobalKey<FormState>();
-  String area = appStore.area, category = 'بطء الإنترنت';
+  String area = normalizeAreaKey(appStore.area);
+  String category = _reportCategoryKeys.first;
   @override
   void dispose() {
     text.dispose();
@@ -507,84 +582,86 @@ class _NewReportScreenState extends State<NewReportScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => CarePage(
-    title: 'بلاغ جديد',
-    children: [
-      CareCard(
-        Form(
-          key: form,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              titleText('صف المشكلة، وخلّنا نتابعها'),
-              const SizedBox(height: 20),
-              DropdownButtonFormField<String>(
-                initialValue: category,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'نوع المشكلة'),
-                items:
-                    [
-                          'بطء الإنترنت',
-                          'ضعف الإشارة',
-                          'انقطاع المكالمات',
-                          'اتصال غير مستقر',
-                        ]
-                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                        .toList(),
-                onChanged: (v) => category = v!,
-              ),
-              const SizedBox(height: 20),
-              DropdownButtonFormField<String>(
-                initialValue: area,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'الحي'),
-                items: neighborhoods
-                    .map((a) => DropdownMenuItem(value: a, child: Text(a)))
-                    .toList(),
-                onChanged: (v) => area = v!,
-              ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: text,
-                minLines: 4,
-                maxLines: 6,
-                maxLength: 1000,
-                decoration: const InputDecoration(
-                  labelText: 'وصف المشكلة',
-                  hintText: 'متى بدأت المشكلة؟ وهل تحدث داخل المنزل أو خارجه؟',
-                  alignLabelWithHint: true,
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return CarePage(
+      title: l10n.newReport,
+      children: [
+        CareCard(
+          Form(
+            key: form,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                titleText(l10n.newReportIntro),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: l10n.issueType),
+                  items: _reportCategoryKeys
+                      .map(
+                        (key) => DropdownMenuItem(
+                          value: key,
+                          child: Text(categoryLabel(l10n, key)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => category = v!,
                 ),
-                validator: (v) => (v ?? '').trim().length < 10
-                    ? 'اكتب وصفًا من 10 أحرف على الأقل'
-                    : null,
-              ),
-              const SizedBox(height: 20),
-              actionButton('حفظ البلاغ على الجهاز', () {
-                if (!form.currentState!.validate()) return;
-                final r = appStore.addReport(
-                  text.text.trim(),
-                  selectedArea: area,
-                  category: category,
-                );
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute<void>(
-                    builder: (_) => Directionality(
-                      textDirection: TextDirection.rtl,
-                      child: ReportDetailScreen(report: r),
-                    ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  initialValue: area,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: l10n.neighborhood),
+                  items: neighborhoodKeys
+                      .map(
+                        (key) => DropdownMenuItem(
+                          value: key,
+                          child: Text(areaLabel(l10n, key)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => area = v!,
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: text,
+                  minLines: 4,
+                  maxLines: 6,
+                  maxLength: 1000,
+                  decoration: InputDecoration(
+                    labelText: l10n.problemDescription,
+                    hintText: l10n.problemDescriptionHint,
+                    alignLabelWithHint: true,
                   ),
-                );
-              }, icon: Icons.add_task),
-              const SizedBox(height: 12),
-              muted(
-                'لن يُرسل البلاغ إلى مزود الخدمة. يمكنك استعراضه وتتبع حالته محليًا.',
-              ),
-            ],
+                  validator: (v) => (v ?? '').trim().length < 10
+                      ? l10n.descriptionMinLength
+                      : null,
+                ),
+                const SizedBox(height: 20),
+                actionButton(l10n.saveReportLocally, () {
+                  if (!form.currentState!.validate()) return;
+                  final r = appStore.addReport(
+                    text.text.trim(),
+                    selectedArea: area,
+                    category: category,
+                  );
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ReportDetailScreen(report: r),
+                    ),
+                  );
+                }, icon: Icons.add_task),
+                const SizedBox(height: 12),
+                muted(l10n.reportLocalOnlyNote),
+              ],
+            ),
           ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class ReportDetailScreen extends StatelessWidget {
@@ -593,120 +670,124 @@ class ReportDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: appStore,
-    builder: (_, __) => CarePage(
-      title: 'تفاصيل البلاغ',
-      children: [
-        CareCard(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.receipt_long, color: _purple, size: 36),
-              const SizedBox(height: 16),
-              titleText(report.category),
-              const SizedBox(height: 8),
-              SelectableText(
-                report.id,
-                style: const TextStyle(color: _mint, fontSize: 11),
-              ),
-              const SizedBox(height: 16),
-              Text(report.description, style: const TextStyle(height: 1.8)),
-              const Divider(height: 30),
-              muted('الحي: ${report.area}'),
-              muted('تاريخ الإنشاء: ${dateLabel(report.created)}'),
-              const SizedBox(height: 8),
-              Text(report.status, style: const TextStyle(color: _mint)),
-            ],
-          ),
-        ),
-        CareCard(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              titleText('مسار المتابعة'),
-              const SizedBox(height: 20),
-              for (final step in <(String, String, bool)>[
-                ('إنشاء البلاغ', 'أُضيف على هذا الجهاز', true),
-                (
-                  'الحفظ المحلي',
-                  appStore.storageFailed
-                      ? 'تعذر الحفظ الدائم'
-                      : appStore.autoSave
-                      ? 'الحفظ التلقائي مفعّل'
-                      : 'استخدم الحفظ اليدوي',
-                  !appStore.storageFailed && appStore.autoSave,
-                ),
-                ('الربط بالدعم', 'غير متصل • لم يُرسل البلاغ إلى STC', false),
-                (
-                  'حالة المتابعة المحلية',
-                  report.status,
-                  report.status == 'مغلق تجريبيًا',
-                ),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 18),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        step.$3
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked,
-                        color: step.$3 ? _mint : const Color(0xFFD5CDDD),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [Text(step.$1), muted(step.$2)],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (report.recommendation.isNotEmpty)
+    builder: (_, __) {
+      final l10n = context.l10n;
+      final closed = isReportClosedStatus(report.status);
+      final localSaveDone = !appStore.storageFailed && appStore.autoSave;
+      return CarePage(
+        title: l10n.reportDetails,
+        children: [
           CareCard(
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                titleText('التوصية الأولية'),
-                const SizedBox(height: 12),
-                Text(report.recommendation),
+                const Icon(Icons.receipt_long, color: _purple, size: 36),
+                const SizedBox(height: 16),
+                titleText(categoryLabel(l10n, report.category)),
                 const SizedBox(height: 8),
-                muted('توصية توضيحية بقواعد محلية وليست تشخيصًا مؤكدًا.'),
+                SelectableText(
+                  report.id,
+                  style: const TextStyle(color: _mint, fontSize: 11),
+                ),
+                const SizedBox(height: 16),
+                Text(report.description, style: const TextStyle(height: 1.8)),
+                const Divider(height: 30),
+                muted(l10n.reportAreaLine(areaLabel(l10n, report.area))),
+                muted(l10n.reportCreatedLine(dateLabel(report.created))),
+                const SizedBox(height: 8),
+                Text(
+                  reportStatusLabel(l10n, report.status),
+                  style: const TextStyle(color: _mint),
+                ),
               ],
             ),
           ),
-        actionButton(
-          report.status == 'مغلق تجريبيًا'
-              ? 'إعادة فتح محليًا'
-              : 'إغلاق البلاغ محليًا',
-          () => appStore.updateStatus(
-            report,
-            report.status == 'مغلق تجريبيًا'
-                ? 'بانتظار الربط'
-                : 'مغلق تجريبيًا',
+          CareCard(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                titleText(l10n.followUpPath),
+                const SizedBox(height: 20),
+                for (final step in <(String, String, bool)>[
+                  (l10n.stepReportCreated, l10n.stepAddedLocally, true),
+                  (
+                    l10n.stepLocalSave,
+                    appStore.storageFailed
+                        ? l10n.stepSaveFailed
+                        : appStore.autoSave
+                        ? l10n.stepAutoSaveOn
+                        : l10n.stepManualSave,
+                    localSaveDone,
+                  ),
+                  (l10n.stepSupportLink, l10n.stepNotLinkedStc, false),
+                  (
+                    l10n.stepLocalStatus,
+                    reportStatusLabel(l10n, report.status),
+                    closed,
+                  ),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 18),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          step.$3
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          color: step.$3 ? _mint : const Color(0xFFD5CDDD),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [Text(step.$1), muted(step.$2)],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
-          icon: Icons.check_circle_outline,
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: () async {
-            await Clipboard.setData(
-              ClipboardData(
-                text:
-                    '${report.id}\n${report.description}\n${report.area}\n${report.status}\nبلاغ تجريبي محلي، لم يُرسل إلى STC',
+          if (report.recommendation.isNotEmpty)
+            CareCard(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  titleText(l10n.initialRecommendation),
+                  const SizedBox(height: 12),
+                  Text(report.recommendation),
+                  const SizedBox(height: 8),
+                  muted(l10n.recommendationDisclaimer),
+                ],
               ),
-            );
-            if (context.mounted) toast(context, 'تم نسخ ملخص البلاغ');
-          },
-          icon: const Icon(Icons.copy),
-          label: const Text('نسخ ملخص البلاغ'),
-        ),
-      ],
-    ),
+            ),
+          actionButton(
+            closed ? l10n.reopenLocally : l10n.closeLocally,
+            () => appStore.updateStatus(
+              report,
+              closed ? _statusPending : _statusClosedDemo,
+            ),
+            icon: Icons.check_circle_outline,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(
+                ClipboardData(
+                  text:
+                      '${report.id}\n${report.description}\n${areaLabel(l10n, report.area)}\n${reportStatusLabel(l10n, report.status)}\n${l10n.clipboardReportFooter}',
+                ),
+              );
+              if (context.mounted) toast(context, l10n.reportCopiedToast);
+            },
+            icon: const Icon(Icons.copy),
+            label: Text(l10n.copyReportSummary),
+          ),
+        ],
+      );
+    },
   );
 }
 
@@ -721,29 +802,31 @@ class NoticesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: appStore,
-    builder: (_, __) => CarePage(
-      title: 'الإشعارات',
-      actions: [
-        IconButton(
-          tooltip: 'قراءة الكل',
-          onPressed: () {
-            for (final n in appStore.notices) {
-              n.read = true;
-            }
-            appStore.changed();
-          },
-          icon: const Icon(Icons.done_all),
-        ),
-      ],
-      children: [
-        if (!appStore.notifications)
-          const CareCard(Text('الإشعارات الجديدة متوقفة من الإعدادات.')),
-        if (appStore.notices.isEmpty)
-          emptyState(
-            Icons.notifications_none,
-            'كل شيء هادئ هنا',
-            'ستظهر تحديثات البلاغات ونتائج الاختبارات هنا.',
+    builder: (_, __) {
+      final l10n = context.l10n;
+      return CarePage(
+        title: l10n.notifications,
+        actions: [
+          IconButton(
+            tooltip: l10n.markAllRead,
+            onPressed: () {
+              for (final n in appStore.notices) {
+                n.read = true;
+              }
+              appStore.changed();
+            },
+            icon: const Icon(Icons.done_all),
           ),
+        ],
+        children: [
+          if (!appStore.notifications)
+            CareCard(Text(l10n.notificationsDisabled)),
+          if (appStore.notices.isEmpty)
+            emptyState(
+              Icons.notifications_none,
+              l10n.noticesEmptyTitle,
+              l10n.noticesEmptyBody,
+            ),
         for (final n in appStore.notices)
           CareCard(
             ListTile(
@@ -773,8 +856,9 @@ class NoticesScreen extends StatelessWidget {
               },
             ),
           ),
-      ],
-    ),
+        ],
+      );
+    },
   );
 }
 
@@ -789,74 +873,76 @@ class _SyncScreenState extends State<SyncScreen> {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: appStore,
-    builder: (_, __) => CarePage(
-      title: 'الحفظ والمزامنة',
-      children: [
-        const Center(
-          child: Icon(Icons.cloud_off_outlined, size: 80, color: _purple),
-        ),
-        const SizedBox(height: 20),
-        CareCard(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              titleText('بياناتك معك على جهازك'),
-              const SizedBox(height: 12),
-              muted(
-                'يمكن إنشاء البلاغات واستعراض السجل دون اتصال بعد تحميل التطبيق. الخريطة تحتاج الإنترنت لتحميل الطرق.',
-              ),
-              const SizedBox(height: 18),
-              Text(
-                appStore.storageFailed
-                    ? 'تعذر الحفظ على الجهاز'
-                    : 'التخزين المحلي متاح',
-                style: TextStyle(
-                  color: appStore.storageFailed ? Colors.orangeAccent : _mint,
-                ),
-              ),
-              const SizedBox(height: 8),
-              muted(
-                appStore.lastSaved == null
-                    ? 'لم تُحفظ تغييرات بعد'
-                    : 'آخر حفظ: ${dateLabel(appStore.lastSaved!)}',
-              ),
-              const Divider(height: 28),
-              muted('البلاغات: محلية • قياسات الشبكة: عبر خدمة API المستقلة'),
-              muted('البلاغات المرسلة إلى STC: 0'),
-              muted(
-                'عناصر محلية: ${appStore.reports.length + appStore.measurements.length}',
-              ),
-            ],
+    builder: (_, __) {
+      final l10n = context.l10n;
+      final localCount = appStore.reports.length + appStore.measurements.length;
+      return CarePage(
+        title: l10n.saveAndSync,
+        children: [
+          const Center(
+            child: Icon(Icons.cloud_off_outlined, size: 80, color: _purple),
           ),
-        ),
-        actionButton(saving ? 'جارٍ الحفظ…' : 'حفظ البيانات الآن', () async {
-          if (saving) return;
-          setState(() => saving = true);
-          await appStore.save();
-          if (!mounted) return;
-          setState(() => saving = false);
-          if (context.mounted) {
-            toast(
-              context,
-              appStore.storageFailed
-                  ? 'تعذر الحفظ؛ تحقق من إتاحة تخزين المتصفح'
-                  : 'تم حفظ البيانات على هذا الجهاز',
-            );
-          }
-        }, icon: Icons.save_outlined),
-        const SizedBox(height: 16),
-        const CareCard(
-          Text(
-            'لا تُزامن البلاغات المحلية مع STC. تُحفظ قياسات الشبكة على خادم SmartCare فقط عند اكتمال اختبار فعلي والضغط على الحفظ. لا تُعاد محاولة إرسال الموقع في الخلفية.',
-            style: TextStyle(
-              color: StcColors.silver,
-              height: 1.8,
-              fontSize: 12,
+          const SizedBox(height: 20),
+          CareCard(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                titleText(l10n.syncHeroTitle),
+                const SizedBox(height: 12),
+                muted(l10n.syncOfflineBlurb),
+                const SizedBox(height: 18),
+                Text(
+                  appStore.storageFailed
+                      ? l10n.storageFailed
+                      : l10n.storageAvailable,
+                  style: TextStyle(
+                    color: appStore.storageFailed
+                        ? Colors.orangeAccent
+                        : _mint,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                muted(
+                  appStore.lastSaved == null
+                      ? l10n.noSaveYet
+                      : l10n.lastSavedLine(dateLabel(appStore.lastSaved!)),
+                ),
+                const Divider(height: 28),
+                muted(l10n.syncDataSplitNote),
+                muted(l10n.reportsSentToStcCount),
+                muted(l10n.localItemsCount(localCount)),
+              ],
             ),
           ),
-        ),
-      ],
-    ),
+          actionButton(saving ? l10n.saving : l10n.saveDataNow, () async {
+            if (saving) return;
+            setState(() => saving = true);
+            await appStore.save();
+            if (!mounted) return;
+            setState(() => saving = false);
+            if (context.mounted) {
+              toast(
+                context,
+                appStore.storageFailed
+                    ? l10n.saveFailedToast
+                    : l10n.saveSuccessToast,
+              );
+            }
+          }, icon: Icons.save_outlined),
+          const SizedBox(height: 16),
+          CareCard(
+            Text(
+              l10n.syncLongDisclaimer,
+              style: const TextStyle(
+                color: StcColors.silver,
+                height: 1.8,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      );
+    },
   );
 }
 
@@ -907,7 +993,7 @@ class _AdminScreenState extends State<AdminScreen>
     if (networkApi.token == null || !networkApi.isAdmin) {
       setState(() {
         loading = false;
-        error = 'سجّل الدخول بحساب المدير أولًا';
+        error = AppLocalizations(appStore.locale).adminSignInRequired;
       });
       return;
     }
@@ -958,7 +1044,7 @@ class _AdminScreenState extends State<AdminScreen>
       );
       gemini.clear();
       await reload();
-      if (mounted) toast(context, 'تم حفظ إعدادات Gemini');
+      if (mounted) toast(context, context.l10n.geminiSavedToast);
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     } finally {
@@ -987,14 +1073,21 @@ class _AdminScreenState extends State<AdminScreen>
   }
 
   Future<void> deleteUser(Map<String, dynamic> u) async {
+    final l10n = context.l10n;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('حذف المستخدم؟'),
-        content: Text('سيتم حذف ${u['phone']} وكل قياساته نهائيًا.'),
+        title: Text(l10n.deleteUserConfirmTitle),
+        content: Text(l10n.deleteUserConfirmBody('${u['phone']}')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.delete),
+          ),
         ],
       ),
     );
@@ -1002,7 +1095,7 @@ class _AdminScreenState extends State<AdminScreen>
     try {
       await networkApi.request('/api/admin/users/${u['id']}', method: 'DELETE');
       await reload();
-      if (mounted) toast(context, 'تم حذف المستخدم');
+      if (mounted) toast(context, context.l10n.userDeletedToast);
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     }
@@ -1015,7 +1108,7 @@ class _AdminScreenState extends State<AdminScreen>
         method: 'DELETE',
       );
       await reload();
-      if (mounted) toast(context, 'تم حذف القياس');
+      if (mounted) toast(context, context.l10n.measurementDeletedToast);
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     }
@@ -1035,25 +1128,23 @@ class _AdminScreenState extends State<AdminScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     if (!networkApi.isAdmin) {
       return CarePage(
-        title: 'لوحة تحكم المدير',
-        eyebrow: 'ADMIN CONTROL',
+        title: l10n.adminDashboard,
+        eyebrow: l10n.eyebrowAdminControl,
         children: [
           emptyState(
             Icons.admin_panel_settings_outlined,
-            'دخول المدير مطلوب',
-            'سجّل الدخول برقم 0552515874 وكلمة المرور الخاصة بالمدير لفتح اللوحة الكاملة.',
+            l10n.adminAccessRequiredTitle,
+            l10n.adminAccessRequiredBody,
           ),
           actionButton(
-            'تسجيل دخول المدير',
+            l10n.adminSignIn,
             () async {
               await Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: AuthScreen(),
-                  ),
+                  builder: (_) => const AuthScreen(),
                 ),
               );
               if (mounted) reload();
@@ -1067,22 +1158,34 @@ class _AdminScreenState extends State<AdminScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F7),
       appBar: AppBar(
-        title: const Text('لوحة تحكم المدير'),
+        title: Text(l10n.adminDashboard),
         actions: [
           IconButton(
             onPressed: loading ? null : reload,
             icon: const Icon(Icons.refresh),
-            tooltip: 'تحديث',
+            tooltip: l10n.refresh,
           ),
         ],
         bottom: TabBar(
           controller: tabs,
           isScrollable: true,
-          tabs: const [
-            Tab(text: 'نظرة عامة', icon: Icon(Icons.dashboard_outlined, size: 18)),
-            Tab(text: 'المستخدمون', icon: Icon(Icons.people_outline, size: 18)),
-            Tab(text: 'القياسات', icon: Icon(Icons.speed, size: 18)),
-            Tab(text: 'الذكاء والضبط', icon: Icon(Icons.tune, size: 18)),
+          tabs: [
+            Tab(
+              text: l10n.tabOverview,
+              icon: const Icon(Icons.dashboard_outlined, size: 18),
+            ),
+            Tab(
+              text: l10n.tabUsers,
+              icon: const Icon(Icons.people_outline, size: 18),
+            ),
+            Tab(
+              text: l10n.tabMeasurements,
+              icon: const Icon(Icons.speed, size: 18),
+            ),
+            Tab(
+              text: l10n.tabAiSettings,
+              icon: const Icon(Icons.tune, size: 18),
+            ),
           ],
         ),
       ),
@@ -1118,6 +1221,7 @@ class _AdminScreenState extends State<AdminScreen>
   }
 
   Widget _overviewTab() {
+    final l10n = context.l10n;
     final o = overview;
     if (o == null && loading) {
       return const Center(child: CircularProgressIndicator());
@@ -1130,6 +1234,9 @@ class _AdminScreenState extends State<AdminScreen>
         .cast<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
+    final adminName =
+        networkApi.user?['name']?.toString() ?? l10n.adminDefaultName;
+    final phone = networkApi.user?['phone']?.toString() ?? '';
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -1137,38 +1244,40 @@ class _AdminScreenState extends State<AdminScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              titleText('مرحبًا، ${networkApi.user?['name'] ?? 'المدير'}'),
+              titleText(l10n.adminWelcome(adminName)),
               const SizedBox(height: 6),
-              muted(
-                '${networkApi.user?['phone'] ?? ''} • صلاحيات كاملة على الخادم',
-              ),
+              muted(l10n.adminFullAccessSubtitle(phone)),
             ],
           ),
         ),
         adaptiveMetrics([
-          metric('${o?['users'] ?? 0}', 'المستخدمون', Icons.people_outline),
-          metric('${o?['admins'] ?? 0}', 'المدراء', Icons.verified_user_outlined),
-          metric('${o?['measurements'] ?? 0}', 'القياسات', Icons.speed),
+          metric('${o?['users'] ?? 0}', l10n.metricUsers, Icons.people_outline),
+          metric(
+            '${o?['admins'] ?? 0}',
+            l10n.metricAdmins,
+            Icons.verified_user_outlined,
+          ),
+          metric('${o?['measurements'] ?? 0}', l10n.metricMeasurements, Icons.speed),
           metric(
             '${o?['shared_measurements'] ?? 0}',
-            'على الخريطة',
+            l10n.metricOnMap,
             Icons.map_outlined,
           ),
         ]),
         adaptiveMetrics([
           metric(
             _n((o?['avg_download_mbps'] as num?)),
-            'متوسط التحميل Mbps',
+            l10n.metricAvgDownload,
             Icons.download_outlined,
           ),
           metric(
             _n((o?['avg_upload_mbps'] as num?)),
-            'متوسط الرفع Mbps',
+            l10n.metricAvgUpload,
             Icons.upload_outlined,
           ),
           metric(
             _n((o?['avg_ping_ms'] as num?), 0),
-            'متوسط البنق ms',
+            l10n.metricAvgPing,
             Icons.timer_outlined,
           ),
         ]),
@@ -1176,13 +1285,19 @@ class _AdminScreenState extends State<AdminScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              titleText('حالة الخادم'),
+              titleText(l10n.serverStatus),
               const SizedBox(height: 10),
-              muted('Origin: ${o?['public_origin'] == null || '${o?['public_origin']}'.isEmpty ? networkApi.baseUrl : o?['public_origin']}'),
-              muted('Speed API: ${o?['speed_enabled'] == true ? 'مفعّل' : 'متوقف'}'),
-              muted('Gemini: ${o?['gemini_configured'] == true ? 'مضبوط' : 'غير مضبوط'}'),
               muted(
-                'قاعدة البيانات: ${o?['db_path'] ?? '—'} • ${o?['db_persistent'] == true ? 'دائم' : 'مؤقت'}',
+                'Origin: ${o?['public_origin'] == null || '${o?['public_origin']}'.isEmpty ? networkApi.baseUrl : o?['public_origin']}',
+              ),
+              muted(
+                'Speed API: ${o?['speed_enabled'] == true ? l10n.enabled : l10n.stopped}',
+              ),
+              muted(
+                'Gemini: ${o?['gemini_configured'] == true ? l10n.configured : l10n.notConfigured}',
+              ),
+              muted(
+                '${l10n.databaseLabel}: ${o?['db_path'] ?? '—'} • ${o?['db_persistent'] == true ? l10n.persistent : l10n.temporary}',
               ),
               if (o?['persistence_hint'] != null)
                 Text(
@@ -1193,22 +1308,22 @@ class _AdminScreenState extends State<AdminScreen>
           ),
         ),
         if (byConn.isNotEmpty) ...[
-          titleText('حسب نوع الاتصال'),
+          titleText(l10n.byConnectionType),
           const SizedBox(height: 12),
           for (final c in byConn)
             CareCard(
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.wifi_tethering, color: _purple),
-                title: Text('${c['type'] ?? 'غير معروف'}'),
+                title: Text('${c['type'] ?? l10n.unknown}'),
                 subtitle: muted(
-                  '${c['count']} قياس • متوسط ↓ ${_n(c['avg_download'] as num?)} • بنق ${_n(c['avg_ping'] as num?, 0)}',
+                  '${l10n.sampleCount(c['count'] as int? ?? 0)} • ↓ ${_n(c['avg_download'] as num?)} • ${_n(c['avg_ping'] as num?, 0)} ms',
                 ),
               ),
             ),
         ],
         if (top.isNotEmpty) ...[
-          titleText('أكثر المستخدمين نشاطًا'),
+          titleText(l10n.topActiveUsers),
           const SizedBox(height: 12),
           for (final u in top)
             CareCard(
@@ -1230,11 +1345,19 @@ class _AdminScreenState extends State<AdminScreen>
         Row(
           children: [
             Expanded(
-              child: actionButton('المستخدمون', () => tabs.animateTo(1), icon: Icons.people),
+              child: actionButton(
+                l10n.tabUsers,
+                () => tabs.animateTo(1),
+                icon: Icons.people,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: actionButton('القياسات', () => tabs.animateTo(2), icon: Icons.speed),
+              child: actionButton(
+                l10n.tabMeasurements,
+                () => tabs.animateTo(2),
+                icon: Icons.speed,
+              ),
             ),
           ],
         ),
@@ -1243,6 +1366,7 @@ class _AdminScreenState extends State<AdminScreen>
   }
 
   Widget _usersTab() {
+    final l10n = context.l10n;
     final list = filteredUsers;
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -1250,13 +1374,13 @@ class _AdminScreenState extends State<AdminScreen>
         TextField(
           controller: userQuery,
           onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            hintText: 'بحث بالاسم أو الرقم…',
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
+            hintText: l10n.userSearchHint,
           ),
         ),
         const SizedBox(height: 12),
-        muted('${list.length} من ${users.length} مستخدم'),
+        muted(l10n.userCountLine(list.length, users.length)),
         const SizedBox(height: 12),
         for (final u in list)
           CareCard(
@@ -1273,13 +1397,13 @@ class _AdminScreenState extends State<AdminScreen>
               ),
               title: Text(u['name']?.toString() ?? ''),
               subtitle: muted(
-                '${u['phone']}${u['gender_label'] != null && '${u['gender_label']}'.isNotEmpty ? ' • ${u['gender_label']}' : ''} • ${u['tests']} قياس${u['is_admin'] == true ? ' • مدير النظام' : ''}${u['created_at_iso'] != null ? '\nأُنشئ: ${u['created_at_iso']}' : ''}',
+                '${u['phone']}${u['gender_label'] != null && '${u['gender_label']}'.isNotEmpty ? ' • ${u['gender_label']}' : ''} • ${u['tests']}${u['is_admin'] == true ? ' • ${l10n.systemAdmin}' : ''}${u['created_at_iso'] != null ? '\n${u['created_at_iso']}' : ''}',
               ),
               isThreeLine: u['created_at_iso'] != null,
               trailing: u['is_admin'] == true
                   ? const Icon(Icons.verified, color: _purple)
                   : IconButton(
-                      tooltip: 'حذف المستخدم',
+                      tooltip: l10n.deleteUser,
                       onPressed: () => deleteUser(u),
                       icon: const Icon(Icons.delete_outline, color: Colors.orangeAccent),
                     ),
@@ -1290,13 +1414,18 @@ class _AdminScreenState extends State<AdminScreen>
   }
 
   Widget _measurementsTab() {
+    final l10n = context.l10n;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        muted('آخر ${measurements.length} قياس على الخادم'),
+        muted(l10n.recentMeasurementsHeader(measurements.length)),
         const SizedBox(height: 12),
         if (measurements.isEmpty)
-          emptyState(Icons.speed, 'لا قياسات بعد', 'ستظهر هنا فور حفظ أول فحص سرعة.'),
+          emptyState(
+            Icons.speed,
+            l10n.measurementsEmptyTitle,
+            l10n.measurementsEmptyBody,
+          ),
         for (final m in measurements)
           CareCard(
             ListTile(
@@ -1305,11 +1434,11 @@ class _AdminScreenState extends State<AdminScreen>
               subtitle: muted(
                 '↓ ${_n(m['download_mbps'] as num?)} • ↑ ${_n(m['upload_mbps'] as num?)} • ${_n(m['ping_ms'] as num?, 0)} ms\n'
                 '${m['connection_type'] ?? '-'} • ${m['test_status'] ?? '-'}'
-                '${m['cell_y'] != null ? ' • خلية ${m['cell_y']},${m['cell_x']}' : ''}',
+                '${m['cell_y'] != null ? ' • ${l10n.cellIdLine('${m['cell_y']},${m['cell_x']}')}' : ''}',
               ),
               isThreeLine: true,
               trailing: IconButton(
-                tooltip: 'حذف القياس',
+                tooltip: l10n.deleteMeasurement,
                 onPressed: () => deleteMeasurement(m),
                 icon: const Icon(Icons.delete_outline, color: Colors.orangeAccent),
               ),
@@ -1320,6 +1449,7 @@ class _AdminScreenState extends State<AdminScreen>
   }
 
   Widget _settingsTab() {
+    final l10n = context.l10n;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -1327,29 +1457,27 @@ class _AdminScreenState extends State<AdminScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              titleText('مفتاح Gemini للخادم بالكامل'),
+              titleText(l10n.geminiServerKeyTitle),
               const SizedBox(height: 8),
-              muted(
-                'يُحفظ مرة واحدة في قاعدة البيانات ويُستخدم لكل المستخدمين في الويب والتطبيق.',
-              ),
+              muted(l10n.geminiServerKeyBlurb),
               const SizedBox(height: 8),
               muted(
                 geminiMasked == null || geminiMasked!.isEmpty
-                    ? 'لا يوجد مفتاح محفوظ بعد'
-                    : 'المفتاح المحفوظ: $geminiMasked',
+                    ? l10n.geminiNoKeyYet
+                    : l10n.geminiKeyMasked(geminiMasked!),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: gemini,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'مفتاح Gemini API',
-                  hintText: 'الصق المفتاح هنا ثم احفظ مرة واحدة',
+                decoration: InputDecoration(
+                  labelText: l10n.geminiApiKeyLabel,
+                  hintText: l10n.geminiApiKeyHint,
                 ),
               ),
               const SizedBox(height: 12),
               actionButton(
-                savingKey ? 'جارٍ الحفظ…' : 'حفظ في قاعدة البيانات',
+                savingKey ? l10n.saving : l10n.saveToDatabase,
                 saveGemini,
                 icon: Icons.key,
               ),
@@ -1360,18 +1488,16 @@ class _AdminScreenState extends State<AdminScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              titleText('تجربة التحليل'),
+              titleText(l10n.tryAnalysis),
               const SizedBox(height: 12),
               TextField(
                 controller: analyze,
                 maxLines: 5,
-                decoration: const InputDecoration(
-                  hintText: 'اكتب وصف مشكلة شبكة أو ألصق ملخص قياسات…',
-                ),
+                decoration: InputDecoration(hintText: l10n.analyzeInputHint),
               ),
               const SizedBox(height: 12),
               actionButton(
-                analyzing ? 'جارٍ التحليل…' : 'حلّل الآن',
+                analyzing ? l10n.analyzing : l10n.analyzeNow,
                 runAnalyze,
                 icon: Icons.auto_awesome,
               ),
@@ -1386,11 +1512,11 @@ class _AdminScreenState extends State<AdminScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              titleText('بيانات الدخول'),
+              titleText(l10n.loginDetails),
               const SizedBox(height: 8),
-              muted('رقم المدير: 0552515874'),
+              muted(l10n.adminPhoneLine),
               muted('API: ${networkApi.baseUrl}'),
-              muted('بعد الحفظ لا تحتاج إعادة إدخال المفتاح في كل مرة.'),
+              muted(l10n.geminiKeyPersistNote),
             ],
           ),
         ),
@@ -1427,7 +1553,7 @@ class _AiAssistScreenState extends State<AiAssistScreen> {
       setState(() {
         checking = false;
         available = false;
-        error = 'سجّل الدخول لاستخدام التحليل الذكي';
+        error = AppLocalizations(appStore.locale).aiSignInRequired;
       });
       return;
     }
@@ -1473,21 +1599,18 @@ class _AiAssistScreenState extends State<AiAssistScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return CarePage(
-      title: 'مساعد التحليل الذكي',
-      eyebrow: 'GEMINI • SERVER KEY',
+      title: l10n.aiAssistTitle,
+      eyebrow: l10n.eyebrowGemini,
       children: [
-        CareCard(
-          muted(
-            'يستخدم مفتاح Gemini الذي حفظه المدير مرة واحدة في قاعدة بيانات الخادم — مشترك للويب والتطبيق.',
-          ),
-        ),
+        CareCard(muted(l10n.aiAssistIntro)),
         if (checking) const LinearProgressIndicator(),
         if (error != null)
           CareCard(Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
         if (!checking && networkApi.token == null)
           actionButton(
-            'تسجيل الدخول',
+            l10n.signIn,
             () => openCare(context, const AuthScreen()),
             icon: Icons.login,
           ),
@@ -1499,13 +1622,11 @@ class _AiAssistScreenState extends State<AiAssistScreen> {
                 TextField(
                   controller: text,
                   maxLines: 5,
-                  decoration: const InputDecoration(
-                    hintText: 'صف مشكلة الشبكة أو الصق ملخص قياس…',
-                  ),
+                  decoration: InputDecoration(hintText: l10n.aiInputHint),
                 ),
                 const SizedBox(height: 12),
                 actionButton(
-                  loading ? 'جارٍ التحليل…' : 'حلّل الآن',
+                  loading ? l10n.analyzing : l10n.analyzeNow,
                   _run,
                   icon: Icons.auto_awesome,
                 ),
@@ -1522,92 +1643,76 @@ class _AiAssistScreenState extends State<AiAssistScreen> {
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
   @override
-  Widget build(BuildContext context) => CarePage(
-    title: 'نحن هنا لمساعدتك',
-    children: [
-      const Icon(Icons.support_agent, size: 80, color: _purple),
-      const SizedBox(height: 20),
-      for (final item in <(String, String)>[
-        (
-          'كيف أضيف بلاغًا؟',
-          'من بلاغاتي اختر إنشاء بلاغ جديد، أو ابدأ بتشخيص المشكلة عبر المساعد ثم احفظ النتيجة.',
-        ),
-        (
-          'هل القياسات حقيقية؟',
-          'خدمة القياس تنقل بيانات فعلية عند إعداد خادم عام. دون الخدمة لا يظهر قياس. الخريطة تعرض خلايا مجمعة فقط، والطرق من OpenStreetMap.',
-        ),
-        (
-          'هل يصل البلاغ إلى STC؟',
-          'لا، البلاغات محفوظة على جهازك فقط. الربط بمزود الخدمة يحتاج خدمة خلفية وصلاحيات مناسبة.',
-        ),
-        (
-          'ماذا يحدث عند انقطاع الإنترنت؟',
-          'بعد تحميل التطبيق، يمكن استخدام الواجهات وحفظ البلاغات محليًا. تحميل أجزاء جديدة من الخريطة يتطلب اتصالًا.',
-        ),
-        (
-          'هل الحساب آمن للإنتاج؟',
-          'الدخول يستخدم حسابًا وكلمة مرور على خادم SmartCare. ملكية رقم الجوال غير متحققة برسائل SMS، ولا يرتبط الحساب بشركة STC.',
-        ),
-      ])
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final faqs = <(String, String)>[
+      (l10n.faqAddReportQ, l10n.faqAddReportA),
+      (l10n.faqRealMeasurementsQ, l10n.faqRealMeasurementsA),
+      (l10n.faqStcReportsQ, l10n.faqStcReportsA),
+      (l10n.faqOfflineQ, l10n.faqOfflineA),
+      (l10n.faqAccountSafeQ, l10n.faqAccountSafeA),
+    ];
+    return CarePage(
+      title: l10n.helpTitle,
+      children: [
+        const Icon(Icons.support_agent, size: 80, color: _purple),
+        const SizedBox(height: 20),
+        for (final item in faqs)
+          CareCard(
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text(item.$1, style: const TextStyle(fontSize: 15)),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: muted(item.$2),
+                ),
+              ],
+            ),
+          ),
         CareCard(
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: Text(item.$1, style: const TextStyle(fontSize: 15)),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: muted(item.$2),
-              ),
+              titleText(l10n.aboutProductTitle),
+              const SizedBox(height: 10),
+              muted(l10n.aboutBlurb),
+              muted(l10n.aboutVersion),
             ],
           ),
         ),
-      CareCard(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            titleText('STC SmartCare AI'),
-            const SizedBox(height: 10),
-            muted(
-              'مشروع تصوري لتحليل بلاغات الاتصالات ومراقبة جودة الشبكة في مدينة حائل. ليس تطبيقًا رسميًا لشركة STC.',
-            ),
-            muted('الإصدار 1.0 • نموذج واجهات تفاعلي'),
-          ],
+        TextButton(
+          onPressed: () => openCare(context, const PrivacyScreen()),
+          child: Text(l10n.privacyAndData),
         ),
-      ),
-      TextButton(
-        onPressed: () => openCare(context, const PrivacyScreen()),
-        child: const Text('الخصوصية وبياناتك'),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class PrivacyScreen extends StatelessWidget {
   const PrivacyScreen({super.key});
   @override
-  Widget build(BuildContext context) => CarePage(
-    title: 'الخصوصية وبياناتك',
-    children: [
-      CareCard(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            titleText('أنت تعرف أين تُحفظ بياناتك'),
-            const SizedBox(height: 16),
-            muted(
-              'يحفظ هذا النموذج الاسم ورقم الجوال التجريبي والبلاغات والقياسات والإعدادات في التخزين المحلي للتطبيق أو المتصفح. هذا التخزين غير مشفر ولا يمثل حسابًا سحابيًا.',
-            ),
-            const SizedBox(height: 16),
-            muted(
-              'لا يُطلب الموقع إلا بموافقتك لتحريك الخريطة أو مشاركة خلية تقريبية. يمكن الاختبار دون مشاركة الموقع. تُحمّل صور الطرق من CARTO (بيانات OpenStreetMap)؛ يتلقى مزود الخرائط طلبات أجزاء الخريطة وعنوان الإنترنت، ولا يتلقى رقم حسابك من التطبيق.',
-            ),
-            const SizedBox(height: 16),
-            muted(
-              'البلاغات لا تُرسل إلى STC. القياسات المكتملة التي توافق على حفظها تُرسل إلى خادم SmartCare. الموقع اختياري، ويُقرب إلى خلية بنحو 1 كم قبل الإرسال. لا تُخزّن إحداثيات GPS الدقيقة ولا تُنشر هويات المساهمين. تُحتفظ القياسات 90 يومًا وتُحذف من شاشة السجل. جلسة الدخول محفوظة حتى تسجيل الخروج. مسح بيانات المتصفح/التطبيق ينهي الجلسة المحلية فقط ولا يحذف قياسات الخادم.',
-            ),
-          ],
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return CarePage(
+      title: l10n.privacyAndData,
+      children: [
+        CareCard(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleText(l10n.privacyHero),
+              const SizedBox(height: 16),
+              muted(l10n.privacyLocalStorage),
+              const SizedBox(height: 16),
+              muted(l10n.privacyLocationMaps),
+              const SizedBox(height: 16),
+              muted(l10n.privacyReportsMeasurements),
+            ],
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }

@@ -38,6 +38,7 @@ class Settings:
     testing: bool = False
     cors_origins: tuple = ('http://localhost:8080', 'http://127.0.0.1:8080')
     secret_key: str = os.getenv('SMARTCARE_SECRET', 'smartcare-dev-secret-change-me')
+    carto_api_key: str = ''
 
 
 def cell_for(lat, lon):
@@ -73,6 +74,7 @@ def load_settings(**overrides) -> Settings:
             ).split(',')
         ),
         secret_key=os.getenv('SMARTCARE_SECRET', Settings.secret_key),
+        carto_api_key=(os.getenv('SMARTCARE_CARTO_API_KEY') or '').strip(),
     )
     for key, value in overrides.items():
         setattr(base, key, value)
@@ -100,6 +102,43 @@ class Database:
                 UNIQUE(user_id,cell_y,cell_x,hour_bucket));
               CREATE INDEX IF NOT EXISTS measurement_geo_time ON network_measurements(cell_y,cell_x,measurement_time);
               CREATE INDEX IF NOT EXISTS measurement_time ON network_measurements(measurement_time);
+              CREATE TABLE IF NOT EXISTS service_complaints(
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                cell_y INTEGER,
+                cell_x INTEGER,
+                category TEXT NOT NULL DEFAULT 'outage',
+                severity INTEGER NOT NULL DEFAULT 2,
+                note TEXT,
+                created_at REAL NOT NULL
+              );
+              CREATE INDEX IF NOT EXISTS complaints_geo_time ON service_complaints(cell_y,cell_x,created_at);
+              CREATE INDEX IF NOT EXISTS complaints_time ON service_complaints(created_at);
+              CREATE TABLE IF NOT EXISTS alert_subscriptions(
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                cell_y INTEGER NOT NULL,
+                cell_x INTEGER NOT NULL,
+                channel TEXT NOT NULL DEFAULT 'inapp',
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at REAL NOT NULL,
+                UNIQUE(user_id, cell_y, cell_x, channel)
+              );
+              CREATE INDEX IF NOT EXISTS alert_subs_user ON alert_subscriptions(user_id, active);
+              CREATE INDEX IF NOT EXISTS alert_subs_cell ON alert_subscriptions(cell_y, cell_x, active);
+              CREATE TABLE IF NOT EXISTS whatsapp_otps(
+                id TEXT PRIMARY KEY,
+                phone TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                code_hash TEXT NOT NULL,
+                expires_at REAL NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                consumed_at REAL,
+                ip TEXT
+              );
+              CREATE INDEX IF NOT EXISTS whatsapp_otps_phone_purpose
+                ON whatsapp_otps(phone, purpose, created_at);
             '''
             )
             cols = {r[1] for r in db.execute('PRAGMA table_info(users)')}
@@ -124,6 +163,8 @@ class Database:
                 ('second_name', 'TEXT NOT NULL DEFAULT \'\''),
                 ('family_name', 'TEXT NOT NULL DEFAULT \'\''),
                 ('gender', 'TEXT NOT NULL DEFAULT \'\''),
+                ('phone_verified', 'INTEGER NOT NULL DEFAULT 0'),
+                ('country_code', 'TEXT NOT NULL DEFAULT \'SA\''),
             ):
                 if col not in cols:
                     db.execute(f'ALTER TABLE users ADD COLUMN {col} {decl}')
@@ -207,6 +248,8 @@ class Database:
         db = sqlite3.connect(self.path, timeout=15)
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA foreign_keys=ON')
+        db.execute('PRAGMA journal_mode=WAL')
+        db.execute('PRAGMA busy_timeout=15000')
         try:
             yield db
             db.commit()
@@ -218,8 +261,17 @@ class Database:
 
     def cleanup(self):
         with self.connect() as db:
+            cutoff = time.time() - QUALITY['retention_days'] * 86400
             db.execute(
                 'DELETE FROM network_measurements WHERE measurement_time < ?',
-                (time.time() - QUALITY['retention_days'] * 86400,),
+                (cutoff,),
+            )
+            db.execute(
+                'DELETE FROM service_complaints WHERE created_at < ?',
+                (cutoff,),
+            )
+            db.execute(
+                'DELETE FROM whatsapp_otps WHERE expires_at < ? OR (consumed_at IS NOT NULL AND consumed_at < ?)',
+                (time.time(), time.time() - 86400),
             )
             db.execute('DELETE FROM auth_sessions WHERE expires < ?', (time.time(),))

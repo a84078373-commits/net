@@ -1,20 +1,25 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../theme.dart';
 import 'network_api.dart';
 import 'server_auth_screen.dart';
 import 'speed_test_service.dart';
+
 class NetworkTestScreen extends StatelessWidget {
   const NetworkTestScreen({super.key});
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('اختبار جودة الإنترنت')),
-    body: const SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.all(22),
-        child: RealSpeedPanel(),
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.internetQualityTestTitle)),
+      body: const SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(22),
+          child: RealSpeedPanel(),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class RealSpeedPanel extends StatefulWidget {
@@ -38,7 +43,7 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
   String? error;
   String? aiAnalysis;
   String? mappedCellId;
-  String phase = 'جاهز للبدء';
+  String phase = '';
   double progress = 0;
   @override
   void initState() {
@@ -72,8 +77,15 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
     }
   }
 
+  String _connectionLabel(SpeedResult r, AppLocalizations l10n) {
+    if (r.connection == 'cellular') return l10n.connectionMobileNetwork;
+    if (r.connection == 'wifi') return l10n.connectionWifi;
+    return l10n.connectionUncertain;
+  }
+
   Future<void> run() async {
     if (busy) return;
+    final l10n = context.l10n;
     await load();
     if (!mounted) return;
     if (config?['test']?['available'] != true) return;
@@ -81,10 +93,7 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
       await Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => const Directionality(
-            textDirection: TextDirection.rtl,
-            child: ServerAuthScreen(),
-          ),
+          builder: (_) => const ServerAuthScreen(),
         ),
       );
       if (!mounted || networkApi.token == null) return;
@@ -92,18 +101,18 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
     final consent = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('السماح ببدء الاختبار؟'),
+        title: Text(l10n.testConsentTitle),
         content: Text(
-          'سيُقاس الاتصال الحالي (واي فاي أو شبكة الجوال) بنقل بيانات فعلية حتى 64 ميبيبايت خلال 90 ثانية، ثم تُحفظ النتيجة تلقائيًا.\n\n${share ? 'سيُطلب الموقع لرسم خلية تقريبية (~1 كم) على الخريطة، دون حفظ إحداثياتك الدقيقة.' : 'لن يُرسم القياس على الخريطة دون مشاركة الموقع.'}',
+          share ? l10n.testConsentBodyShare : l10n.testConsentBodyNoShare,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: const Text('إلغاء'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('أوافق وأبدأ'),
+            child: Text(l10n.agreeAndStart),
           ),
         ],
       ),
@@ -119,35 +128,30 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
       aiAnalysis = null;
       mappedCellId = null;
       progress = 0;
+      phase = l10n.phaseReady;
     });
     try {
       ApproximateLocation? location;
       var shareThisRun = share;
       if (shareThisRun) {
-        setState(() => phase = 'تحديد موقع أدق للخريطة…');
+        setState(() => phase = l10n.phaseLocating);
         try {
           location = await LocationService().locate();
           if (location.accuracy > LocationService.maxShareAccuracyM) {
             shareThisRun = false;
             location = null;
             if (mounted) {
-              setState(
-                () => error =
-                    'دقة الموقع غير كافية للمشاركة • سيُحفظ القياس دون رسم على الخريطة',
-              );
+              setState(() => error = l10n.locationAccuracyInsufficient);
             }
           }
         } on NetworkFailure catch (e) {
-          // Speed measurement must still run; map share is optional.
           shareThisRun = false;
           location = null;
-          if (mounted) {
-            setState(() => error = '${e.message} • سيُحفظ القياس دون رسم على الخريطة');
-          }
+          if (mounted) setState(() => error = e.message);
         }
       }
       if (!mounted || cancelled) {
-        throw const NetworkFailure('أُلغي الاختبار قبل نقل البيانات');
+        throw NetworkFailure(l10n.testCancelledBeforeTransfer);
       }
       final value = await service.run(
         location: location,
@@ -211,45 +215,32 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
   Future<void> analyzeResult() async {
     final r = result;
     if (r == null || analyzing) return;
+    final l10n = context.l10n;
     setState(() {
       analyzing = true;
       aiAnalysis = null;
     });
     try {
-      final prompt = StringBuffer()
-        ..writeln('حلّل نتيجة فحص سرعة شبكة للمستخدم:')
-        ..writeln('- التحميل: ${r.download.toStringAsFixed(1)} Mbps')
-        ..writeln('- الرفع: ${r.upload.toStringAsFixed(1)} Mbps')
-        ..writeln('- البنق: ${r.ping.toStringAsFixed(0)} ms')
-        ..writeln(
-          '- نوع الاتصال: ${r.connection == 'cellular'
-              ? 'شبكة الجوال'
-              : r.connection == 'wifi'
-              ? 'واي فاي'
-              : 'غير مؤكد'}',
-        );
-      if (mappedCellId != null) {
-        prompt.writeln('- رُسم على خلية: $mappedCellId');
-      } else {
-        prompt.writeln('- لم تُشارك إحداثيات على الخريطة');
-      }
-      prompt.writeln(
-        'اذكر تقييمًا مختصرًا وجودة الاستخدام اليومي ونصيحة واحدة عملية.',
+      final prompt = l10n.aiSpeedPrompt(
+        download: r.download.toStringAsFixed(1),
+        upload: r.upload.toStringAsFixed(1),
+        ping: r.ping.toStringAsFixed(0),
+        connection: _connectionLabel(r, l10n),
+        cellId: mappedCellId,
       );
       final res = await networkApi.request(
         '/api/ai/analyze',
         method: 'POST',
-        body: {'text': prompt.toString()},
+        body: {'text': prompt},
       );
       if (mounted) {
-        setState(() => aiAnalysis = res['analysis']?.toString() ?? 'لا توجد نتيجة');
+        setState(
+          () => aiAnalysis = res['analysis']?.toString() ?? l10n.aiNoResult,
+        );
       }
     } catch (e) {
       if (mounted) {
-        setState(
-          () => aiAnalysis =
-              'تعذر التحليل الذكي: $e\n(تأكد أن المدير حفظ مفتاح Gemini في لوحة الإدارة)',
-        );
+        setState(() => aiAnalysis = l10n.aiAnalysisFailed(e.toString()));
       }
     } finally {
       if (mounted) setState(() => analyzing = false);
@@ -260,6 +251,7 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
       StcCard(margin: const EdgeInsets.only(bottom: 16), child: child);
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final mode = config?['test']?['mode'];
     final available =
         config?['test']?['available'] == true &&
@@ -270,18 +262,18 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'القياس',
-              style: TextStyle(
+            Text(
+              l10n.measurementSectionTitle,
+              style: const TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
                 color: StcColors.onyx,
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              'فحص السرعة مسموح على الواي فاي أو شبكة الجوال. بعد الحفظ تُرسم على الخريطة (طبقة قياساتك) ويُحلَّل بالذكاء الاصطناعي تلقائيًا.',
-              style: TextStyle(color: StcColors.silver, height: 1.7),
+            Text(
+              l10n.speedTestIntro,
+              style: const TextStyle(color: StcColors.silver, height: 1.7),
             ),
             const SizedBox(height: 20),
             if (loading) const LinearProgressIndicator(),
@@ -296,17 +288,17 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                       size: 42,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'اختبار الإنترنت غير متاح',
-                      style: TextStyle(
+                    Text(
+                      l10n.testUnavailableTitle,
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      config?['test']?['reason'] ??
-                          'تعذر الوصول إلى خدمة القياس',
+                      config?['test']?['reason']?.toString() ??
+                          l10n.testUnavailableDefault,
                       style: const TextStyle(
                         color: StcColors.silver,
                         height: 1.7,
@@ -315,7 +307,7 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                     TextButton.icon(
                       onPressed: load,
                       icon: const Icon(Icons.refresh),
-                      label: const Text('إعادة التحقق'),
+                      label: Text(l10n.retryCheck),
                     ),
                   ],
                 ),
@@ -336,10 +328,13 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                 children: [
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('ارسم النتيجة على الخريطة'),
-                    subtitle: const Text(
-                      'يُحفظ القياس مع نوع الشبكة (واي فاي أو خلوي) في خلية تقريبية نحو 1 كم',
-                      style: TextStyle(fontSize: 11, color: StcColors.silver),
+                    title: Text(l10n.shareOnMapSwitch),
+                    subtitle: Text(
+                      l10n.shareOnMapSubtitle,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: StcColors.silver,
+                      ),
                     ),
                     value: share,
                     onChanged: busy || saving || saved
@@ -348,7 +343,7 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                   ),
                   if (busy) ...[
                     const SizedBox(height: 20),
-                    Text(phase),
+                    Text(phase.isEmpty ? l10n.phaseReady : phase),
                     const SizedBox(height: 12),
                     LinearProgressIndicator(value: progress),
                     const SizedBox(height: 12),
@@ -357,20 +352,20 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                         cancelled = true;
                         service.cancel();
                       },
-                      child: const Text('إلغاء الاختبار'),
+                      child: Text(l10n.cancelTest),
                     ),
                   ] else if (available)
                     StcCoralBar(
                       title: result == null
-                          ? 'ابدأ فحص السرعة'
-                          : 'اختبار جديد',
-                      action: 'ابدأ',
+                          ? l10n.startSpeedTest
+                          : l10n.newTest,
+                      action: l10n.startAction,
                       onTap: run,
                     ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Jitter وفقد الحزم غير متاحين؛ HTTP لا يقيس فقد حزم الشبكة. شركة الاتصالات غير معروفة دون مصدر موثوق.',
-                    style: TextStyle(
+                  Text(
+                    l10n.jitterDisclaimer,
+                    style: const TextStyle(
                       fontSize: 11,
                       color: StcColors.silver,
                       height: 1.7,
@@ -399,10 +394,10 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'نتيجتك الفعلية',
-                            style: TextStyle(
+                            l10n.yourResultTitle,
+                            style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w800,
                             ),
@@ -413,35 +408,31 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                     const SizedBox(height: 20),
                     StcUsageBar(
                       icon: Icons.south_rounded,
-                      label: 'التنزيل',
+                      label: l10n.download,
                       value: '${result!.download.toStringAsFixed(2)} Mbps',
                       progress: (result!.download / 300).clamp(0.08, 1),
                     ),
                     StcUsageBar(
                       icon: Icons.north_rounded,
-                      label: 'الرفع',
+                      label: l10n.upload,
                       value: '${result!.upload.toStringAsFixed(2)} Mbps',
                       progress: (result!.upload / 100).clamp(0.08, 1),
                     ),
                     StcUsageBar(
                       icon: Icons.bolt_outlined,
-                      label: 'استجابة HTTP',
+                      label: l10n.httpLatency,
                       value: '${result!.ping.toStringAsFixed(1)} ms',
                       progress: (1 - (result!.ping / 200)).clamp(0.08, 1),
                     ),
                     Text(
-                      '${result!.connection == 'cellular'
-                          ? 'شبكة الجوال'
-                          : result!.connection == 'wifi'
-                          ? 'واي فاي'
-                          : 'نوع الاتصال غير مؤكد'} • ${((result!.downloadBytes + result!.uploadBytes) / 1048576).toStringAsFixed(1)} MiB',
+                      '${_connectionLabel(result!, l10n)} • ${((result!.downloadBytes + result!.uploadBytes) / 1048576).toStringAsFixed(1)} MiB',
                       style: const TextStyle(color: StcColors.silver),
                     ),
                     const SizedBox(height: 8),
                     if (share && result!.location == null)
-                      const Text(
-                        'لم يُجمع موقع لهذا الاختبار؛ أوقف المساهمة لحفظ نتيجة خاصة.',
-                        style: TextStyle(color: Colors.orangeAccent),
+                      Text(
+                        l10n.noLocationForTest,
+                        style: const TextStyle(color: Colors.orangeAccent),
                       ),
                     const SizedBox(height: 12),
                     FilledButton.icon(
@@ -454,18 +445,18 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                       ),
                       label: Text(
                         saved
-                            ? 'تم الحفظ في قاعدة البيانات'
+                            ? l10n.savedToDatabase
                             : saving
-                            ? 'جارٍ الحفظ…'
+                            ? l10n.saving
                             : share
-                            ? 'حفظ النتيجة والمساهمة بالخريطة'
-                            : 'حفظ نتيجة خاصة على الخادم',
+                            ? l10n.saveResultShare
+                            : l10n.saveResultPrivate,
                       ),
                     ),
                     if (mappedCellId != null) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'رُسم على الخريطة — خلية $mappedCellId (طبقة قياساتك بالأحمر)',
+                        l10n.mappedCellLine(mappedCellId!),
                         style: const TextStyle(
                           color: StcColors.purple,
                           fontWeight: FontWeight.w600,
@@ -474,15 +465,15 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                     ],
                     if (analyzing) ...[
                       const SizedBox(height: 16),
-                      const Text('جارٍ التحليل الذكي…'),
+                      Text(l10n.analyzing),
                       const SizedBox(height: 8),
                       const LinearProgressIndicator(),
                     ],
                     if (aiAnalysis != null) ...[
                       const SizedBox(height: 16),
-                      const Text(
-                        'تحليل الذكاء الاصطناعي',
-                        style: TextStyle(
+                      Text(
+                        l10n.aiAnalysisTitle,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
                         ),
@@ -491,9 +482,9 @@ class _RealSpeedPanelState extends State<RealSpeedPanel> {
                       Text(aiAnalysis!, style: const TextStyle(height: 1.7)),
                     ],
                     const SizedBox(height: 12),
-                    const Text(
-                      'قياساتك تظهر فورًا في طبقة «قياساتك» على الخريطة. الطبقة العامة تحتاج عينات من عدة مساهمين.',
-                      style: TextStyle(
+                    Text(
+                      l10n.mapLayerNote,
+                      style: const TextStyle(
                         fontSize: 11,
                         color: StcColors.silver,
                         height: 1.7,
@@ -554,135 +545,134 @@ class _RealHistoryScreenState extends State<RealHistoryScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('سجل القياسات الفعلية'),
-      actions: [
-        IconButton(
-          tooltip: 'تحديث',
-          onPressed: () => load(reset: true),
-          icon: const Icon(Icons.refresh),
-        ),
-      ],
-    ),
-    body: ListView(
-      padding: const EdgeInsets.all(22),
-      children: [
-        const Text(
-          'من قاعدة البيانات • نتائج مكتملة فقط',
-          style: TextStyle(
-            color: StcColors.purple,
-            fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.realHistoryTitle),
+        actions: [
+          IconButton(
+            tooltip: l10n.refresh,
+            onPressed: () => load(reset: true),
+            icon: const Icon(Icons.refresh),
           ),
-        ),
-        const SizedBox(height: 20),
-        if (networkApi.token == null)
-          FilledButton(
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: ServerAuthScreen(),
-                  ),
-                ),
-              );
-              if (mounted && networkApi.token != null) load(reset: true);
-            },
-            child: const Text('تسجيل الدخول لاستعراض سجلي'),
-          ),
-        if (loading) const LinearProgressIndicator(),
-        if (error != null)
-          Text(error!, style: const TextStyle(color: Colors.orangeAccent)),
-        if (!loading && rows.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(30),
-            child: Text(
-              'لا توجد قياسات فعلية معروضة. نتائج المحاكاة القديمة لا تدخل هذا السجل.',
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(22),
+        children: [
+          Text(
+            l10n.realHistorySubtitle,
+            style: const TextStyle(
+              color: StcColors.purple,
+              fontWeight: FontWeight.w700,
             ),
           ),
-        for (final row in rows)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    DateTime.fromMillisecondsSinceEpoch(
-                      ((row['measurement_time'] as num) * 1000).round(),
-                      isUtc: true,
-                    ).toLocal().toString().substring(0, 16),
+          const SizedBox(height: 20),
+          if (networkApi.token == null)
+            FilledButton(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ServerAuthScreen(),
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 18,
-                    runSpacing: 10,
-                    children: [
-                      Text(
-                        '↓ ${(row['download_mbps'] as num).toStringAsFixed(2)} Mbps',
-                      ),
-                      Text(
-                        '↑ ${(row['upload_mbps'] as num).toStringAsFixed(2)} Mbps',
-                      ),
-                      Text(
-                        'HTTP ${(row['ping_ms'] as num).toStringAsFixed(1)} ms',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'قياس نقل HTTP مكتمل',
-                    style: TextStyle(color: StcColors.silver, fontSize: 11),
-                  ),
-                ],
-              ),
+                );
+                if (mounted && networkApi.token != null) load(reset: true);
+              },
+              child: Text(l10n.signInToViewHistory),
             ),
-          ),
-        if (more && rows.isNotEmpty)
-          TextButton(
-            onPressed: loading ? null : load,
-            child: const Text('تحميل المزيد'),
-          ),
-        if (rows.isNotEmpty)
-          TextButton.icon(
-            icon: const Icon(Icons.delete_outline),
-            label: const Text('حذف قياساتي من الخادم'),
-            onPressed: () async {
-              final yes = await showDialog<bool>(
-                context: context,
-                builder: (c) => AlertDialog(
-                  title: const Text('حذف جميع قياساتك؟'),
-                  content: const Text(
-                    'سيُحذف سجلك ومساهماتك من الخريطة. لا يمكن التراجع.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(c, false),
-                      child: const Text('إلغاء'),
+          if (loading) const LinearProgressIndicator(),
+          if (error != null)
+            Text(error!, style: const TextStyle(color: Colors.orangeAccent)),
+          if (!loading && rows.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(30),
+              child: Text(l10n.realHistoryEmpty),
+            ),
+          for (final row in rows)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      DateTime.fromMillisecondsSinceEpoch(
+                        ((row['measurement_time'] as num) * 1000).round(),
+                        isUtc: true,
+                      ).toLocal().toString().substring(0, 16),
                     ),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(c, true),
-                      child: const Text('حذف قياساتي'),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 18,
+                      runSpacing: 10,
+                      children: [
+                        Text(
+                          '↓ ${(row['download_mbps'] as num).toStringAsFixed(2)} Mbps',
+                        ),
+                        Text(
+                          '↑ ${(row['upload_mbps'] as num).toStringAsFixed(2)} Mbps',
+                        ),
+                        Text(
+                          'HTTP ${(row['ping_ms'] as num).toStringAsFixed(1)} ms',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.httpTestCompleted,
+                      style: const TextStyle(
+                        color: StcColors.silver,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
-              );
-              if (yes == true) {
-                try {
-                  await networkApi.request(
-                    '/api/network-tests/mine',
-                    method: 'DELETE',
-                  );
-                  if (mounted) load(reset: true);
-                } catch (e) {
-                  if (mounted) setState(() => error = e.toString());
+              ),
+            ),
+          if (more && rows.isNotEmpty)
+            TextButton(
+              onPressed: loading ? null : load,
+              child: Text(l10n.loadMore),
+            ),
+          if (rows.isNotEmpty)
+            TextButton.icon(
+              icon: const Icon(Icons.delete_outline),
+              label: Text(l10n.deleteMyMeasurementsFromServer),
+              onPressed: () async {
+                final yes = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: Text(l10n.deleteAllMeasurementsTitle),
+                    content: Text(l10n.deleteAllMeasurementsBody),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c, false),
+                        child: Text(l10n.cancel),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(c, true),
+                        child: Text(l10n.deleteMyMeasurements),
+                      ),
+                    ],
+                  ),
+                );
+                if (yes == true) {
+                  try {
+                    await networkApi.request(
+                      '/api/network-tests/mine',
+                      method: 'DELETE',
+                    );
+                    if (mounted) load(reset: true);
+                  } catch (e) {
+                    if (mounted) setState(() => error = e.toString());
+                  }
                 }
-              }
-            },
-          ),
-      ],
-    ),
-  );
+              },
+            ),
+        ],
+      ),
+    );
+  }
 }

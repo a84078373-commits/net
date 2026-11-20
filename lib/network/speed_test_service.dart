@@ -4,7 +4,11 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import '../app_store.dart';
+import '../l10n/app_localizations.dart';
 import 'network_api.dart';
+
+AppLocalizations get _l10n => AppLocalizations(appStore.locale);
 
 class ApproximateLocation {
   final double latitude, longitude, accuracy;
@@ -24,9 +28,7 @@ class LocationService {
 
   Future<ApproximateLocation> locate() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      throw const NetworkFailure(
-        'خدمة الموقع متوقفة؛ يمكنك الاختبار دون مشاركة الموقع',
-      );
+      throw NetworkFailure(_l10n.locationServiceDisabled);
     }
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -34,9 +36,7 @@ class LocationService {
     }
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      throw const NetworkFailure(
-        'لم يُمنح إذن الموقع. لن يُرسل موقع؛ يمكنك إجراء اختبار خاص',
-      );
+      throw NetworkFailure(_l10n.locationPermissionDenied);
     }
     Position? best;
     try {
@@ -55,13 +55,11 @@ class LocationService {
       best = await Geolocator.getLastKnownPosition();
     }
     if (best == null) {
-      throw const NetworkFailure(
-        'تعذر تحديد الموقع؛ فعّل GPS وانتظر إشارة ثم أعد المحاولة، أو أوقف مشاركة الموقع',
-      );
+      throw NetworkFailure(_l10n.locationUnavailable);
     }
     if (best.accuracy > maxShareAccuracyM) {
       throw NetworkFailure(
-        'دقة الموقع ضعيفة (~${best.accuracy.round()} م). اخرج لمكان مفتوح أو فعّل GPS الدقيق ثم أعد المحاولة',
+        _l10n.locationAccuracyPoor(best.accuracy.round()),
       );
     }
     return _cell(best);
@@ -131,18 +129,22 @@ class SpeedTestService {
   }) async {
     _cancelled = false;
     if (api.token == null) {
-      throw const NetworkFailure('سجّل الدخول بالخادم قبل إجراء الاختبار');
+      throw NetworkFailure(_l10n.signInBeforeTest);
     }
     final config = await api.config();
-    if (_cancelled) throw const NetworkFailure('أُلغي الاختبار قبل بدء النقل');
+    if (_cancelled) {
+      throw NetworkFailure(_l10n.testCancelledBeforeTransfer);
+    }
     final test = config['test'] as Map;
     final mode = test['mode'] as String? ?? '';
     if (test['available'] != true || (mode != 'internet' && mode != 'local')) {
-      throw NetworkFailure(test['reason'] ?? 'اختبار الإنترنت غير متاح');
+      throw NetworkFailure(
+        test['reason']?.toString() ?? _l10n.testUnavailableDefault,
+      );
     }
     final declared = Uri.tryParse(test['server_id'] as String? ?? '');
     if (declared == null || declared.host.isEmpty) {
-      throw const NetworkFailure('خادم القياس غير معرّف');
+      throw NetworkFailure(_l10n.measurementServerUndefined);
     }
     _transferRoot = declared.scheme == 'https'
         ? declared
@@ -161,11 +163,11 @@ class SpeedTestService {
         'X-Test-Session': sid,
         'Cache-Control': 'no-cache',
       };
-      onProgress('التحقق من مسار القياس', 0.02);
+      onProgress(_l10n.phaseVerifyPath, 0.02);
       await _send('GET', '/api/speed/ping', headers, seconds: 10);
       final rtts = <double>[];
       for (var i = 0; i < 8; i++) {
-        onProgress('قياس زمن الاستجابة HTTP', i / 8 * .15);
+        onProgress(_l10n.phaseHttpLatency, i / 8 * .15);
         final watch = Stopwatch()..start();
         await _send('GET', '/api/speed/ping', headers, seconds: 10);
         if (i > 0) rtts.add(watch.elapsedMicroseconds / 1000);
@@ -186,14 +188,10 @@ class SpeedTestService {
             (watch.elapsedMicroseconds / 1e6 < target ||
                 count < 4 * 1024 * 1024)) {
           if (_cancelled) {
-            throw const NetworkFailure(
-              'أُلغي الاختبار أو انتهت مدته؛ لا توجد نتيجة مكتملة',
-            );
+            throw NetworkFailure(_l10n.testIncompleteCancelled);
           }
           onProgress(
-            down
-                ? 'قياس التنزيل بنقل بيانات فعلية'
-                : 'قياس الرفع بنقل بيانات فعلية',
+            down ? _l10n.phaseDownload : _l10n.phaseUpload,
             (down ? .15 : .55) + .38 * (count / phaseCap),
           );
           final sent = await _send(
@@ -207,9 +205,7 @@ class SpeedTestService {
         }
         final seconds = watch.elapsedMicroseconds / 1e6;
         if (count < 4 * 1024 * 1024 || seconds <= 0) {
-          throw const NetworkFailure(
-            'حجم النقل أقل من الحد الأدنى؛ لن تُقبل النتيجة',
-          );
+          throw NetworkFailure(_l10n.transferTooSmall);
         }
         return (count, seconds);
       }
@@ -232,9 +228,9 @@ class SpeedTestService {
       }
       rtts.sort();
       if (rtts.isEmpty) {
-        throw const NetworkFailure('تعذر قياس زمن الاستجابة');
+        throw NetworkFailure(_l10n.latencyMeasureFailed);
       }
-      onProgress('اكتمل القياس', 1);
+      onProgress(_l10n.phaseComplete, 1);
       return SpeedResult(
         download: down.$1 * 8 / down.$2 / 1e6,
         upload: up.$1 * 8 / up.$2 / 1e6,
@@ -252,20 +248,16 @@ class SpeedTestService {
     } on NetworkFailure {
       rethrow;
     } on TimeoutException {
-      throw const NetworkFailure(
-        'انتهت مهلة الاتصال بخادم القياس؛ لم تُحفظ نتيجة',
-      );
+      throw NetworkFailure(_l10n.measurementServerTimeout);
     } on http.ClientException {
       throw NetworkFailure(
         _cancelled
-            ? 'أُلغي الاختبار أو انتهت مدته'
-            : 'انقطع الاتصال بخادم القياس أثناء النقل',
+            ? _l10n.testIncompleteCancelled
+            : _l10n.measurementServerDisconnected,
       );
     } catch (_) {
       throw NetworkFailure(
-        _cancelled
-            ? 'أُلغي الاختبار أو انتهت مدته'
-            : 'انقطع الاختبار؛ لم تُنشأ أو تُحفظ نتيجة مكتملة',
+        _cancelled ? _l10n.testIncompleteCancelled : _l10n.testInterrupted,
       );
     } finally {
       deadline.cancel();
@@ -281,7 +273,7 @@ class SpeedTestService {
     Uint8List? body,
     int seconds = 45,
   }) async {
-    if (_cancelled) throw const NetworkFailure('تم إلغاء الاختبار');
+    if (_cancelled) throw NetworkFailure(_l10n.testCancelled);
     final root = (_transferRoot ?? Uri.parse(api.baseUrl))
         .toString()
         .replaceAll(RegExp(r'/$'), '');
@@ -301,12 +293,10 @@ class SpeedTestService {
     final response = await _client!.send(req).timeout(limit);
     if (response.headers['content-encoding'] != null &&
         response.headers['content-encoding'] != 'identity') {
-      throw const NetworkFailure(
-        'رفض نتيجة نقل مضغوط؛ تحقق من إعداد خادم القياس',
-      );
+      throw NetworkFailure(_l10n.compressedTransferRejected);
     }
     if (response.statusCode != 200) {
-      throw const NetworkFailure('رفض خادم القياس النقل أو انتهت ميزانيته');
+      throw NetworkFailure(_l10n.transferRejected);
     }
     var bytes = 0;
     await for (final chunk in response.stream.timeout(limit)) {
@@ -315,7 +305,7 @@ class SpeedTestService {
     if (method == 'GET' &&
         path.endsWith('download') &&
         bytes != 2 * 1024 * 1024) {
-      throw const NetworkFailure('تنزيل ناقص؛ لن تُقبل النتيجة');
+      throw NetworkFailure(_l10n.downloadIncomplete);
     }
     return bytes;
   }

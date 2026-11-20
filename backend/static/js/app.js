@@ -1,29 +1,42 @@
 (function () {
   const toggle = document.getElementById('navToggle');
   const nav = document.getElementById('siteNav');
+  const backdrop = document.getElementById('sidebarBackdrop');
+
+  function setOpen(open) {
+    if (!nav) return;
+    nav.classList.toggle('is-open', open);
+    document.body.classList.toggle('sidebar-open', open);
+    if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (backdrop) backdrop.hidden = !open;
+  }
+
   if (toggle && nav) {
     toggle.addEventListener('click', function () {
-      const open = nav.classList.toggle('is-open');
-      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      setOpen(!nav.classList.contains('is-open'));
     });
+    if (backdrop) {
+      backdrop.addEventListener('click', function () { setOpen(false); });
+    }
     nav.querySelectorAll('a').forEach(function (link) {
       link.addEventListener('click', function () {
-        if (window.matchMedia('(max-width: 899px)').matches) {
-          nav.classList.remove('is-open');
-          toggle.setAttribute('aria-expanded', 'false');
-        }
+        if (window.matchMedia('(max-width: 999px)').matches) setOpen(false);
       });
     });
   }
 
-  // Mark active nav link
   if (nav) {
     const path = window.location.pathname.replace(/\/$/, '') || '/';
-    nav.querySelectorAll('a[href]').forEach(function (a) {
-      try {
-        const href = new URL(a.href, window.location.origin).pathname.replace(/\/$/, '') || '/';
-        if (href === path) a.classList.add('is-active');
-      } catch (_) {}
+    const hash = window.location.hash || '';
+    nav.querySelectorAll('a[data-nav]').forEach(function (a) {
+      const target = a.getAttribute('data-nav') || '';
+      const targetPath = target.split('#')[0] || '/';
+      const targetHash = target.includes('#') ? '#' + target.split('#')[1] : '';
+      if (targetPath === path && (!targetHash || targetHash === hash)) {
+        a.classList.add('is-active');
+      } else if (targetPath === path && !targetHash && !hash) {
+        a.classList.add('is-active');
+      }
     });
   }
 })();

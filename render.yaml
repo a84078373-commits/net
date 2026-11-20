@@ -29,3 +29,6 @@ services:
       # Optional override; app already seeds a built-in default if unset.
       - key: SMARTCARE_GEMINI_API_KEY
         sync: false
+      # Free CARTO basemap key from https://carto.com/basemaps/apikey/
+      - key: SMARTCARE_CARTO_API_KEY
+        sync: false

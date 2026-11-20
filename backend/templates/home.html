@@ -1,45 +1,579 @@
 {% extends "base.html" %}
-{% block title %}مرحبا بكم في stc • SmartCare{% endblock %}
+{% block title %}{{ _('لوحة التحكم') }} • SmartCare{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+{% endblock %}
 {% block content %}
-<div class="page-stack">
-  <section class="hero" aria-labelledby="hero-title">
-    <h1 id="hero-title">مرحبا بكم في stc</h1>
-    <p>قياس سرعة الشبكة وخريطة جودة التغطية لحائل — نفس الخدمة التي يستخدمها التطبيق.</p>
-    <form class="search" action="{{ url_for('web_speed') }}" method="get" role="search">
-      <label class="visually-hidden" for="q" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">بحث</label>
-      <input id="q" type="search" name="q" placeholder="ما الذي تبحث عنه؟" readonly aria-readonly="true">
-      <button type="submit" aria-label="الانتقال لفحص السرعة">بحث</button>
-    </form>
-  </section>
+<div class="dash" id="dashboard" aria-busy="true">
+  <div class="dash-kpis">
+    <article class="kpi-card">
+      <div class="kpi-label">{{ _('إجمالي القياسات') }}</div>
+      <div class="kpi-value" id="kpiTotal">—</div>
+      <div class="kpi-delta flat" id="kpiTotalDelta">{{ _('من قاعدة الخادم') }}</div>
+      <div class="kpi-spark-wrap"><canvas class="kpi-spark" id="sparkTotal" aria-hidden="true"></canvas></div>
+    </article>
+    <article class="kpi-card">
+      <div class="kpi-label">{{ _('جودة الشبكة (تقديري)') }}</div>
+      <div class="kpi-value" id="kpiQuality">—</div>
+      <div class="kpi-delta flat" id="kpiQualityHint">{{ _('جيد + متوسط') }}</div>
+      <div class="kpi-spark-wrap"><canvas class="kpi-spark" id="sparkQuality" aria-hidden="true"></canvas></div>
+    </article>
+    <article class="kpi-card">
+      <div class="kpi-label">{{ _('مواقع جيدة') }}</div>
+      <div class="kpi-value" id="kpiGood">—</div>
+      <div class="kpi-delta up" id="kpiGoodHint">{{ _('تصنيف التحميل') }}</div>
+      <div class="kpi-spark-wrap"><canvas class="kpi-spark" id="sparkGood" aria-hidden="true"></canvas></div>
+    </article>
+    <article class="kpi-card">
+      <div class="kpi-label">{{ _('مواقع ضعيفة') }}</div>
+      <div class="kpi-value" id="kpiWeak">—</div>
+      <div class="kpi-delta down" id="kpiWeakHint">{{ _('ضعيفة / ضعيفة جدًا') }}</div>
+      <div class="kpi-spark-wrap"><canvas class="kpi-spark" id="sparkWeak" aria-hidden="true"></canvas></div>
+    </article>
+  </div>
 
-  <section aria-labelledby="products-title">
-    <h2 class="section-title" id="products-title">استكشف منتجاتنا</h2>
-    <div class="cards-2">
-      <article class="shot dark">
-        <h3>حول رقمك إلى stc</h3>
-      </article>
-      <article class="shot purple">
-        <h3>شريحة جوال وإنترنت</h3>
-      </article>
+  <div class="dash-mid">
+    <section class="card">
+      <div class="card-head">
+        <h2>{{ _('توزيع جودة التحميل') }}</h2>
+      </div>
+      <div class="chart-wrap donut-wrap">
+        <canvas id="qualityChart" aria-label="{{ _('مخطط توزيع الجودة') }}"></canvas>
+        <div class="donut-center" id="qualityCenter" hidden>
+          <strong id="qualityCenterValue">0</strong>
+          <span>{{ _('إجمالي القياسات') }}</span>
+        </div>
+      </div>
+      <div class="donut-legend" id="qualityLegend"></div>
+      <p class="empty-hint" id="qualityEmpty" hidden>{{ _('لا قياسات بعد — نفّذ فحص سرعة لملء اللوحة.') }}</p>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <h2>{{ _('خريطة جودة الشبكة') }}</h2>
+        <a class="ghost" href="{{ url_for('web_map') }}">{{ _('فتح الخريطة') }}</a>
+      </div>
+      <div id="dashMap" class="mini-map" dir="ltr" role="application" aria-label="{{ _('خريطة مصغّرة لجودة الشبكة') }}"></div>
+      <div class="map-legend-inline" id="dashMapLegend"></div>
+    </section>
+  </div>
+
+  <div class="feature-trio" aria-label="{{ _('قدرات المنصة') }}">
+    <a class="feature-card" href="{{ url_for('web_radar') }}">
+      <span class="feature-role">{{ _('للفني') }}</span>
+      <strong>{{ _('رادار الأعطال الاستباقي') }}</strong>
+      <span>{{ _('إنذار مبكر وترتيب الأحياء حسب الأولوية.') }}</span>
+    </a>
+    {% if is_admin %}
+    <a class="feature-card" href="{{ url_for('web_twin') }}">
+      <span class="feature-role">{{ _('للمدير') }}</span>
+      <strong>{{ _('التوأم الرقمي للشبكة') }}</strong>
+      <span>{{ _('حاكِ تعطل برج أو إضافة موقع قبل التنفيذ.') }}</span>
+    </a>
+    {% else %}
+    <a class="feature-card" href="{{ url_for('web_map') }}">
+      <span class="feature-role">{{ _('للتحليل') }}</span>
+      <strong>{{ _('الخريطة الحرارية') }}</strong>
+      <span>{{ _('طبقة حية لجودة التغطية في حائل.') }}</span>
+    </a>
+    {% endif %}
+    <a class="feature-card" href="{{ url_for('web_status') }}">
+      <span class="feature-role">{{ _('للعميل') }}</span>
+      <strong>{{ _('حالة شبكتي') }}</strong>
+      <span>{{ _('هل المشكلة من الشبكة أم جهازك؟ مع تنبيه وخطوات.') }}</span>
+    </a>
+  </div>
+
+  <section class="card radar-board" id="radarBoard" aria-labelledby="radarTitle">
+    <div class="card-head">
+      <div>
+        <h2 id="radarTitle">{{ _('رادار الأعطال الاستباقي') }}</h2>
+        <p class="muted radar-sub">{{ _('إنذار مبكر عند ارتفاع الشكاوى وتدهور القياس معًا مقارنة بالمعتاد لنفس الوقت.') }}</p>
+      </div>
+      <a class="ghost" href="{{ url_for('web_radar') }}">{{ _('لوحة الفني') }}</a>
+    </div>
+    <div class="radar-board-grid">
+      <div class="radar-priority" id="radarPriority">
+        <div class="radar-empty" id="radarEmpty">{{ _('لا إنذارات حاليًا — الرادار يراقب الشكاوى والقياسات.') }}</div>
+      </div>
+      <div class="radar-timeline-wrap">
+        <div class="radar-timeline-head">
+          <strong>{{ _('تدهور الشبكة خلال 24 ساعة') }}</strong>
+          <span class="muted" id="radarSummaryChips"></span>
+        </div>
+        <div class="chart-wrap radar-chart">
+          <canvas id="radarTimelineChart" aria-label="{{ _('شريط زمني لمؤشر خطر الأعطال') }}"></canvas>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section aria-labelledby="join-title">
-    <h2 class="section-title" id="join-title">انضم إلى stc</h2>
-    <a class="join" href="{{ url_for('web_speed') }}">الإنترنت المنزلي / ابدأ فحص السرعة</a>
-  </section>
-
-  <section aria-labelledby="actions-title">
-    <h2 class="section-title" id="actions-title">إجراءات سريعة</h2>
-    <div class="actions">
-      <a href="{{ url_for('web_speed') }}"><strong>فحص السرعة</strong><span>قياس فعلي</span></a>
-      <a href="{{ url_for('web_map') }}"><strong>خريطة الجودة</strong><span>خلايا حائل</span></a>
-      <a href="{{ url_for('web_ai') }}"><strong>الذكاء</strong><span>تحليل Gemini</span></a>
-      <a href="{{ url_for('web_login') }}"><strong>الحساب</strong><span>دخول / تسجيل</span></a>
-      {% if is_admin %}
-      <a href="{{ url_for('web_admin') }}"><strong>لوحة المدير</strong><span>تحكم كامل</span></a>
-      {% endif %}
-    </div>
-  </section>
+  <div class="dash-bottom">
+    <section class="card">
+      <div class="card-head">
+        <h2>{{ _('اتجاه القياسات — آخر 7 أيام') }}</h2>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="trendChart" aria-label="{{ _('مخطط اتجاه القياسات') }}"></canvas>
+      </div>
+    </section>
+    <section class="card promo-card">
+      <h3>{{ _('حالة شبكتي') }}</h3>
+      <p>{{ _('فحص الموقع والسرعة والتحليل الذكي في صفحة واحدة.') }}</p>
+      <div class="row">
+        <a class="cta" href="{{ url_for('web_status') }}">{{ _('افتح حالة شبكتي') }}</a>
+        <a class="ghost" href="{{ url_for('web_status') }}#speedSection" style="background:rgba(255,255,255,0.15);color:#fff">{{ _('فحص السرعة') }}</a>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <h2>{{ _('مؤشرات الأداء') }}</h2>
+      </div>
+      <div class="kpi-stack">
+        <div class="kpi-row">
+          <div>
+            <small>{{ _('زمن الاستجابة') }}</small>
+            <strong id="kpiPing">—</strong>
+          </div>
+          <span class="kpi-delta flat">ms</span>
+        </div>
+        <div class="kpi-row">
+          <div>
+            <small>{{ _('سرعة الرفع') }}</small>
+            <strong id="kpiUp">—</strong>
+          </div>
+          <span class="kpi-delta flat">Mbps</span>
+        </div>
+        <div class="kpi-row">
+          <div>
+            <small>{{ _('سرعة التحميل') }}</small>
+            <strong id="kpiDown">—</strong>
+          </div>
+          <span class="kpi-delta flat">Mbps</span>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="status-card">
+        <div class="status-pill" id="svcSpeed">{{ _('جاري التحقق…') }}</div>
+        <div class="status-pill" id="svcAi">{{ _('جاري التحقق…') }}</div>
+        <a class="ghost" href="{{ url_for('web_help') }}">{{ _('عرض التفاصيل') }}</a>
+      </div>
+    </section>
+  </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<script>
+const BOUNDS = {{ quality.bounds|tojson }};
+const COLORS = {{ quality.colors|tojson }};
+const CARTO_KEY = {{ (carto_api_key or '')|tojson }};
+const DATE_LOCALE = window.LANG === 'en' ? 'en-GB' : 'ar-SA';
+
+function hexAlpha(hex, a) {
+  const h = (hex || '#4f008c').replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+}
+
+/** Smooth visible sparkline from real values (pads sparse / flat / zero series). */
+function sparkSeries(values, mode) {
+  const src = (values && values.length ? values.slice() : [0]).map((v) => Number(v) || 0);
+  while (src.length < 7) src.unshift(src[0] || 0);
+  const last = src[src.length - 1];
+  const max = Math.max(...src, 0);
+  const min = Math.min(...src);
+  // Flat or empty: gentle wave around the real level so the chart stays readable.
+  if (max === min) {
+    const base = mode === 'percent' ? Math.max(0, Math.min(100, last)) : last;
+    const amp = mode === 'percent'
+      ? Math.max(4, Math.min(12, base * 0.08 || 6))
+      : Math.max(0.35, base * 0.18 || 0.45);
+    return Array.from({ length: 12 }, (_, i) => {
+      const t = i / 11;
+      const wave = Math.sin(t * Math.PI * 2.15) * 0.55 + Math.sin(t * Math.PI * 0.9) * 0.35;
+      return Math.max(0, base * (mode === 'percent' && base === 0 ? 0 : 0.82) + amp * (0.65 + wave) * (base === 0 && mode === 'percent' ? 0.15 : 1));
+    }).map((v, i, arr) => (i === arr.length - 1 ? (mode === 'percent' && last === 0 ? arr[i] : last || arr[i]) : v));
+  }
+  // Sparse spike: ease toward the real points across 12 samples.
+  const out = [];
+  for (let i = 0; i < 12; i++) {
+    const t = i / 11;
+    const pos = t * (src.length - 1);
+    const i0 = Math.floor(pos);
+    const i1 = Math.min(src.length - 1, i0 + 1);
+    const f = pos - i0;
+    const eased = f * f * (3 - 2 * f);
+    out.push(src[i0] * (1 - eased) + src[i1] * eased);
+  }
+  return out;
+}
+
+function sparkline(canvas, values, color, mode) {
+  if (!canvas || !window.Chart) return;
+  const series = sparkSeries(values, mode || 'count');
+  const ctx = canvas.getContext('2d');
+  const yMax = mode === 'percent'
+    ? 100
+    : Math.max(...series, 1) * 1.35;
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: series.map((_, i) => i),
+      datasets: [{
+        data: series,
+        borderColor: color,
+        backgroundColor: (c) => {
+          const { chartArea } = c.chart;
+          if (!chartArea) return hexAlpha(color, 0.25);
+          const g = c.chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          g.addColorStop(0, hexAlpha(color, 0.42));
+          g.addColorStop(1, hexAlpha(color, 0.02));
+          return g;
+        },
+        fill: true,
+        tension: 0.45,
+        pointRadius: 0,
+        borderWidth: 2.4,
+        borderJoinStyle: 'round',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 650 },
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      layout: { padding: { top: 6, bottom: 0, left: 0, right: 0 } },
+      scales: {
+        x: { display: false },
+        y: { display: false, min: 0, max: yMax }
+      }
+    }
+  });
+  return chart;
+}
+
+function fmtDelta(v) {
+  if (v == null) return T('لا مقارنة بعد');
+  const sign = v > 0 ? '+' : '';
+  return sign + v + '% · ' + T('مقارنة بالأسبوع السابق');
+}
+
+async function loadDashboard() {
+  const root = document.getElementById('dashboard');
+  try {
+    const res = await fetch('/api/dashboard/summary');
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || T('تعذر تحميل اللوحة'));
+
+    document.getElementById('kpiTotal').textContent = d.measurements.toLocaleString(DATE_LOCALE);
+    document.getElementById('kpiTotalDelta').textContent = fmtDelta(d.measurements_delta_pct);
+    document.getElementById('kpiTotalDelta').className = 'kpi-delta ' + (
+      d.measurements_delta_pct == null ? 'flat' : d.measurements_delta_pct >= 0 ? 'up' : 'down'
+    );
+    document.getElementById('kpiQuality').textContent = (d.network_quality_pct ?? 0) + '%';
+    document.getElementById('kpiGood').textContent = (d.good_locations_pct ?? 0) + '%';
+    document.getElementById('kpiWeak').textContent = (d.weak_locations_pct ?? 0) + '%';
+
+    const ping = d.avg_ping_ms == null ? '—' : d.avg_ping_ms.toFixed(0) + ' ms';
+    const up = d.avg_upload_mbps == null ? '—' : d.avg_upload_mbps.toFixed(1) + ' Mbps';
+    const down = d.avg_download_mbps == null ? '—' : d.avg_download_mbps.toFixed(1) + ' Mbps';
+    document.getElementById('kpiPing').textContent = ping;
+    document.getElementById('kpiUp').textContent = up;
+    document.getElementById('kpiDown').textContent = down;
+
+    const speedEl = document.getElementById('svcSpeed');
+    speedEl.textContent = d.speed_available ? T('اختبار السرعة متاح') : T('اختبار السرعة غير متاح');
+    speedEl.className = 'status-pill' + (d.speed_available ? '' : ' warn');
+    const aiEl = document.getElementById('svcAi');
+    aiEl.textContent = d.ai_available ? T('الذكاء الاصطناعي جاهز') : T('الذكاء الاصطناعي غير مضبوط');
+    aiEl.className = 'status-pill' + (d.ai_available ? '' : ' warn');
+
+    const trendVals = (d.trend_7d || []).map(x => x.count);
+    sparkline(document.getElementById('sparkTotal'), trendVals, '#4f008c', 'count');
+    sparkline(document.getElementById('sparkQuality'), [d.network_quality_pct ?? 0], '#6b3fa0', 'percent');
+    sparkline(document.getElementById('sparkGood'), [d.good_locations_pct ?? 0], '#39DDB3', 'percent');
+    sparkline(document.getElementById('sparkWeak'), [d.weak_locations_pct ?? 0], '#ef526a', 'percent');
+
+    const qb = d.quality_breakdown || {};
+    const qLabels = [T('جيدة'), T('متوسطة'), T('ضعيفة'), T('ضعيفة جدًا')];
+    const qData = [qb.good || 0, qb.moderate || 0, qb.poor || 0, qb.very_poor || 0];
+    const qColors = [COLORS.good, COLORS.moderate, COLORS.poor, COLORS.very_poor];
+    const qSum = qData.reduce((a, b) => a + b, 0);
+    document.getElementById('qualityEmpty').hidden = qSum > 0;
+    const center = document.getElementById('qualityCenter');
+    if (center) {
+      center.hidden = qSum <= 0;
+      document.getElementById('qualityCenterValue').textContent = qSum.toLocaleString(DATE_LOCALE);
+    }
+    if (window.Chart && qSum > 0) {
+      new Chart(document.getElementById('qualityChart'), {
+        type: 'doughnut',
+        data: {
+          labels: qLabels,
+          datasets: [{
+            data: qData,
+            backgroundColor: qColors,
+            borderWidth: 3,
+            borderColor: '#fff',
+            hoverOffset: 6,
+          }]
+        },
+        options: {
+          cutout: '72%',
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const v = ctx.raw || 0;
+                  const pct = Math.round(100 * v / qSum);
+                  return ' ' + ctx.label + ': ' + v + ' (' + pct + '%)';
+                }
+              }
+            }
+          }
+        }
+      });
+      document.getElementById('qualityLegend').innerHTML = qLabels.map((label, i) => {
+        const pct = Math.round(100 * qData[i] / qSum);
+        return `<span><i style="background:${qColors[i]}"></i>${label} (${pct}%)</span>`;
+      }).join('');
+    }
+
+    if (window.Chart) {
+      const labels = (d.trend_7d || []).map(x => {
+        try {
+          return new Date(x.date + 'T00:00:00Z').toLocaleDateString(DATE_LOCALE, { weekday: 'short' });
+        } catch (_) { return x.date; }
+      });
+      const trendCanvas = document.getElementById('trendChart');
+      const tctx = trendCanvas.getContext('2d');
+      const tgrad = tctx.createLinearGradient(0, 0, 0, 220);
+      tgrad.addColorStop(0, 'rgba(79,0,140,0.35)');
+      tgrad.addColorStop(1, 'rgba(79,0,140,0.02)');
+      const trendMax = Math.max(...trendVals, 1);
+      new Chart(trendCanvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: T('القياسات'),
+            data: trendVals,
+            borderColor: '#4f008c',
+            backgroundColor: tgrad,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: '#fff',
+            pointBorderColor: '#4f008c',
+            pointBorderWidth: 2,
+            borderWidth: 2.5,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: {
+              beginAtZero: true,
+              suggestedMax: Math.max(3, trendMax * 1.35),
+              ticks: { precision: 0, color: '#6f7380' },
+              grid: { color: 'rgba(79,0,140,0.08)' },
+              border: { display: false },
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#6f7380' },
+              border: { display: false },
+            }
+          }
+        }
+      });
+    }
+
+    // Predictive outage radar board
+    try {
+      const radarBbox = BOUNDS.join(',');
+      const radar = await fetch('/api/outage-radar?bbox=' + encodeURIComponent(radarBbox)).then((r) => r.json());
+      const queue = radar.priority_queue || [];
+      const empty = document.getElementById('radarEmpty');
+      const list = document.getElementById('radarPriority');
+      const chips = document.getElementById('radarSummaryChips');
+      const sum = radar.summary || {};
+      chips.textContent = [
+        sum.critical ? (T('حرج') + ' ' + sum.critical) : '',
+        sum.high ? (T('مرتفع') + ' ' + sum.high) : '',
+        sum.watch ? (T('مراقبة') + ' ' + sum.watch) : '',
+      ].filter(Boolean).join(' · ') || T('مستقر');
+      if (!queue.length) {
+        empty.hidden = false;
+      } else {
+        empty.hidden = true;
+        list.innerHTML = queue.slice(0, 6).map((a, idx) => {
+          const pct = Math.round((a.risk || 0) * 100);
+          return `<button type="button" class="radar-priority-item ${a.level}" data-bounds='${JSON.stringify(a.bounds)}'>
+            <span class="radar-rank">${idx + 1}</span>
+            <span class="radar-priority-body">
+              <strong>${a.label}</strong>
+              <small>${a.message}</small>
+            </span>
+            <span class="radar-score" title="${T('الأولوية')}">${pct}%</span>
+          </button>`;
+        }).join('');
+        list.querySelectorAll('.radar-priority-item').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            location.href = {{ url_for('web_map')|tojson }} + '?focus=radar';
+          });
+        });
+      }
+      if (window.Chart) {
+        const tl = radar.timeline_24h || [];
+        const labels = tl.map((x) => x.label);
+        const riskVals = tl.map((x) => Math.round((x.risk_index || 0) * 100));
+        const pingVals = tl.map((x) => x.avg_ping_ms == null ? null : x.avg_ping_ms);
+        new Chart(document.getElementById('radarTimelineChart'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: T('مؤشر الخطر'),
+                data: riskVals,
+                borderColor: '#ff375e',
+                backgroundColor: 'rgba(255,55,94,0.18)',
+                fill: true,
+                tension: 0.35,
+                pointRadius: 0,
+                borderWidth: 2.2,
+                yAxisID: 'y',
+              },
+              {
+                label: T('زمن الاستجابة'),
+                data: pingVals,
+                borderColor: '#7c6cf0',
+                backgroundColor: 'transparent',
+                tension: 0.35,
+                pointRadius: 0,
+                borderWidth: 1.6,
+                borderDash: [4, 4],
+                yAxisID: 'y1',
+                spanGaps: true,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: { boxWidth: 10, font: { size: 11 } },
+              },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: { callback: (v) => v + '%', color: '#6f7380' },
+                grid: { color: 'rgba(255,55,94,0.08)' },
+                border: { display: false },
+              },
+              y1: {
+                position: 'right',
+                beginAtZero: true,
+                grid: { display: false },
+                ticks: { color: '#6f7380', callback: (v) => v + ' ms' },
+                border: { display: false },
+              },
+              x: {
+                ticks: { maxTicksLimit: 8, color: '#6f7380' },
+                grid: { display: false },
+                border: { display: false },
+              },
+            },
+          },
+        });
+      }
+    } catch (_) { /* radar is additive; dashboard still works */ }
+
+    // Mini thermal map from real cells
+    const hailCenter = [(BOUNDS[1] + BOUNDS[3]) / 2, (BOUNDS[0] + BOUNDS[2]) / 2];
+    const map = L.map('dashMap', { zoomControl: true, attributionControl: false, preferCanvas: true }).setView(hailCenter, 11);
+    const dashTiles = CARTO_KEY
+      ? ('https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=' + encodeURIComponent(CARTO_KEY))
+      : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+    L.tileLayer(dashTiles, {
+      attribution: CARTO_KEY ? '&copy; OSM &copy; CARTO' : 'Tiles &copy; Esri',
+      maxZoom: CARTO_KEY ? 20 : 16,
+    }).addTo(map);
+    L.rectangle([[BOUNDS[1], BOUNDS[0]], [BOUNDS[3], BOUNDS[2]]], {
+      color: '#a78bfa', weight: 2, fillOpacity: 0.03, dashArray: '6 4'
+    }).addTo(map);
+    const bbox = BOUNDS.join(',');
+    const heat = await fetch('/api/network-heatmap?bbox=' + encodeURIComponent(bbox)).then(r => r.json());
+    const pts = [];
+    const qInt = { very_poor: 1, poor: 0.78, moderate: 0.48, good: 0.22, insufficient: 0.18, stale: 0.35 };
+    (heat.cells || []).forEach(cell => {
+      const cb = cell.bounds;
+      const q = (cell.quality && cell.quality.download) || cell.status || 'insufficient';
+      const color = COLORS[q] || COLORS.insufficient;
+      L.rectangle([[cb[1], cb[0]], [cb[3], cb[2]]], {
+        color, weight: 0.8, fillColor: color, fillOpacity: 0.08
+      }).addTo(map);
+      const base = qInt[q] || 0.3;
+      for (let iy = 0; iy < 6; iy++) {
+        for (let ix = 0; ix < 6; ix++) {
+          const u = (ix + 0.5) / 6, v = (iy + 0.5) / 6;
+          const lat = cb[1] + (cb[3] - cb[1]) * v;
+          const lon = cb[0] + (cb[2] - cb[0]) * u;
+          const dx = u - 0.5, dy = v - 0.5;
+          const fall = Math.exp(-(dx * dx + dy * dy) / 0.09);
+          pts.push([lat, lon, Math.max(0.05, Math.min(1, base * (0.35 + 0.75 * fall)))]);
+        }
+      }
+    });
+    if (pts.length && L.heatLayer) {
+      L.heatLayer(pts, {
+        radius: 58, blur: 44, maxZoom: 18, minOpacity: 0.45,
+        gradient: {
+          0.0: 'rgba(27,206,216,0)', 0.2: '#1bced8', 0.4: '#39DDB3',
+          0.55: '#F5D76E', 0.75: '#FF914D', 1.0: '#EF526A'
+        }
+      }).addTo(map);
+    }
+    document.getElementById('dashMapLegend').innerHTML =
+      `<span><i style="background:${COLORS.good}"></i>${T('جيدة')}</span>` +
+      `<span><i style="background:${COLORS.moderate}"></i>${T('متوسطة')}</span>` +
+      `<span><i style="background:${COLORS.poor}"></i>${T('ضعيفة')}</span>` +
+      `<span><i style="background:${COLORS.very_poor}"></i>${T('ضعيفة جدًا')}</span>` +
+      (d.empty ? `<span>${T('لا خلايا منشورة بعد')}</span>` : '');
+    setTimeout(() => map.invalidateSize(), 150);
+  } catch (err) {
+    document.getElementById('kpiTotal').textContent = '—';
+    document.getElementById('qualityEmpty').hidden = false;
+    document.getElementById('qualityEmpty').textContent = err.message || String(err);
+  } finally {
+    root.setAttribute('aria-busy', 'false');
+  }
+}
+
+function whenReady(fn) {
+  if (window.Chart && window.L && window.L.heatLayer) return fn();
+  const t = setInterval(() => {
+    if (window.Chart && window.L && window.L.heatLayer) { clearInterval(t); fn(); }
+  }, 50);
+  setTimeout(() => { clearInterval(t); if (window.Chart && window.L) fn(); }, 8000);
+}
+whenReady(loadDashboard);
+</script>
 {% endblock %}

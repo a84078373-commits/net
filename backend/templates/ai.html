@@ -1,21 +1,21 @@
 {% extends "base.html" %}
-{% block title %}مساعد التحليل الذكي{% endblock %}
+{% block title %}{{ _('الذكاء الاصطناعي') }}{% endblock %}
 {% block content %}
 <section class="panel" aria-labelledby="ai-title">
-  <h1 id="ai-title">مساعد التحليل الذكي</h1>
+  <h1 id="ai-title">{{ _('الذكاء الاصطناعي') }}</h1>
   <p class="muted">
-    يستخدم مفتاح Gemini الذي حفظه المدير في قاعدة بيانات الخادم — مرة واحدة للجميع (ويب + تطبيق).
+    {{ _('يستخدم مفتاح Gemini الذي حفظه المدير في قاعدة بيانات الخادم — مرة واحدة للجميع (ويب + تطبيق).') }}
   </p>
   {% if not available %}
-    <div class="alert" role="alert">الخدمة غير مفعّلة بعد. يحتاج المدير حفظ مفتاح Gemini من لوحة الإدارة.</div>
+    <div class="alert" role="alert">{{ _('الخدمة غير مفعّلة بعد. يحتاج المدير حفظ مفتاح Gemini من لوحة الإدارة.') }}</div>
   {% else %}
-    <p class="badge" role="status">الذكاء الاصطناعي جاهز على الخادم</p>
+    <p class="badge" role="status">{{ _('الذكاء الاصطناعي جاهز على الخادم') }}</p>
     <form class="stack" id="aiForm" onsubmit="return false;">
-      <label for="text">صف مشكلة الشبكة أو الصق ملخص قياس
-        <textarea id="text" rows="5" placeholder="مثال: التحميل ضعيف مساءً على 5G في حي النقرة"></textarea>
+      <label for="text">{{ _('صف مشكلة الشبكة أو الصق ملخص قياس') }}
+        <textarea id="text" rows="5" placeholder="{{ _('مثال: التحميل ضعيف مساءً على 5G في حي النقرة') }}"></textarea>
       </label>
       <div class="row">
-        <button type="button" id="run" class="primary">حلّل الآن</button>
+        <button type="button" id="run" class="primary">{{ _('حلّل الآن') }}</button>
       </div>
     </form>
     <div id="msg" class="alert" hidden role="alert"></div>
@@ -35,13 +35,13 @@ document.getElementById('run').onclick = async () => {
   msg.hidden = true;
   if (text.length < 3) {
     msg.hidden = false;
-    msg.textContent = 'اكتب وصفًا أطول قليلاً';
+    msg.textContent = T('اكتب وصفًا أطول قليلاً');
     return;
   }
   if (btn.disabled) return;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> جارٍ التحليل…';
-  out.textContent = 'جارٍ التحليل…';
+  btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> ' + T('جارٍ التحليل…');
+  out.textContent = T('جارٍ التحليل…');
   try {
     const res = await fetch('/api/ai/analyze', {
       method: 'POST',
@@ -52,7 +52,7 @@ document.getElementById('run').onclick = async () => {
       body: JSON.stringify({text})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'فشل التحليل');
+    if (!res.ok) throw new Error(data.detail || T('فشل التحليل'));
     out.textContent = data.analysis || '';
   } catch (e) {
     out.textContent = '';
@@ -60,7 +60,7 @@ document.getElementById('run').onclick = async () => {
     msg.textContent = e.message || String(e);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'حلّل الآن';
+    btn.textContent = T('حلّل الآن');
   }
 };
 </script>

@@ -1,0 +1,985 @@
+{% extends "base.html" %}
+{% block title %}{{ _('التوأم الرقمي للشبكة') }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+{% endblock %}
+{% block content %}
+<section class="twin-sim" aria-labelledby="twin-title">
+  <header class="twin-sim-hero">
+    <div class="twin-sim-hero-copy">
+      <p class="twin-kicker">{{ _('للمدير ومهندس التخطيط') }} · Realtime Twin</p>
+      <h1 id="twin-title">{{ _('التوأم الرقمي للشبكة') }}</h1>
+      <p>{{ _('تفاعل لحظي: أضف أو احذف برجًا وشاهد الأحمر يختفي والأخضر ينتشر كموجة تغطية حقيقية.') }}</p>
+    </div>
+    <div class="twin-gauges" aria-live="polite">
+      <div class="twin-gauge">
+        <svg viewBox="0 0 120 72" class="twin-gauge-svg" aria-hidden="true">
+          <path class="twin-gauge-track" d="M10 62 A50 50 0 0 1 110 62" fill="none" stroke-width="10" stroke-linecap="round"/>
+          <path id="gaugeArc" class="twin-gauge-arc" d="M10 62 A50 50 0 0 1 110 62" fill="none" stroke-width="10" stroke-linecap="round"
+            stroke-dasharray="157" stroke-dashoffset="157"/>
+        </svg>
+        <strong id="twinHealth">—</strong>
+        <span>{{ _('صحة النموذج') }}</span>
+      </div>
+      <div class="twin-kpi-pill"><b id="twinTowers">—</b><span>{{ _('أبراج نشطة') }}</span></div>
+      <div class="twin-kpi-pill"><b id="twinMeasured">—</b><span>{{ _('خلايا مقيسة') }}</span></div>
+      <div class="twin-kpi-pill twin-kpi-delta" id="twinDeltaPill" hidden>
+        <b id="twinDeltaValue">0%</b><span>{{ _('أثر لحظي') }}</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="twin-stage">
+    <div id="twinMap" class="twin-stage-map" dir="ltr" role="application" aria-label="{{ _('خريطة التوأم الرقمي') }}"></div>
+    <div class="twin-scanline" aria-hidden="true"></div>
+    <div class="twin-fx" id="twinFx" aria-hidden="true"></div>
+
+    <aside class="twin-console" aria-label="{{ _('محاكي الأبراج') }}">
+      <div class="twin-console-head">
+        <h2>{{ _('محاكي الأبراج') }}</h2>
+        <span class="twin-live-dot">LIVE</span>
+      </div>
+
+      <div class="twin-tool-grid" role="radiogroup" aria-label="{{ _('أداة') }}">
+        <button type="button" class="twin-scenario is-active" data-tool="select">
+          <strong>{{ _('تحديد') }}</strong>
+          <small>{{ _('اختر برجًا من الخريطة') }}</small>
+        </button>
+        <button type="button" class="twin-scenario" data-tool="add">
+          <strong>{{ _('إضافة') }}</strong>
+          <small>{{ _('انقر الخريطة لزرع برج') }}</small>
+        </button>
+        <button type="button" class="twin-scenario" data-tool="disable">
+          <strong>{{ _('تعطيل') }}</strong>
+          <small>{{ _('أوقف سعة البرج المحدد') }}</small>
+        </button>
+        <button type="button" class="twin-scenario" data-tool="delete">
+          <strong>{{ _('حذف') }}</strong>
+          <small>{{ _('أزل البرج من المحاكاة') }}</small>
+        </button>
+      </div>
+      <input type="hidden" id="toolSelect" value="select">
+
+      <div class="twin-selected" id="selectedPanel" hidden>
+        <p class="twin-selected-title"><b id="selName">—</b> <span id="selId" class="muted"></span></p>
+        <p class="twin-hint" id="selSector"></p>
+        <label class="twin-field">
+          <span>{{ _('نصف القطر') }} (km): <b id="radiusVal">6.5</b></span>
+          <input id="towerRadius" type="range" min="3" max="14" step="0.5" value="6.5">
+        </label>
+        <label class="twin-field">
+          <span>{{ _('السعة') }}: <b id="capVal">1.0</b></span>
+          <input id="towerCapacity" type="range" min="0.5" max="2.0" step="0.05" value="1.0">
+        </label>
+        <div class="twin-console-actions twin-sel-actions">
+          <button type="button" class="twin-reset" id="btnToggleTower">{{ _('تعطيل / تشغيل') }}</button>
+          <button type="button" class="twin-reset twin-danger" id="btnDeleteTower">{{ _('حذف البرج') }}</button>
+        </div>
+      </div>
+
+      <p class="twin-hint" id="toolHint">{{ _('الأثر يتحدّث في نفس اللحظة — لا انتظار.') }}</p>
+
+      <div class="twin-console-actions">
+        <button type="button" class="twin-reset" id="btnResetTwin">{{ _('إعادة الضبط') }}</button>
+      </div>
+
+      <div class="twin-compare" id="compareWrap" hidden>
+        <span>{{ _('خط الأساس') }}</span>
+        <input type="range" id="compareSlider" min="0" max="100" value="100" aria-label="{{ _('مقارنة قبل / بعد') }}">
+        <span>{{ _('بعد التعديل') }}</span>
+      </div>
+
+      <p class="twin-note" id="twinNote"></p>
+    </aside>
+
+    <aside class="twin-intel" id="twinResult" hidden aria-live="polite">
+      <div class="twin-intel-head">
+        <h2>{{ _('تقرير الأثر') }}</h2>
+        <span id="twinSimBadge" class="twin-sim-badge">LIVE</span>
+      </div>
+      <p id="twinDelta" class="twin-delta-line"></p>
+      <div class="twin-bars" id="twinBars"></div>
+      <div class="twin-recs-wrap">
+        <h3>{{ _('الحل المقترح') }}</h3>
+        <ul id="twinRecs" class="twin-recs"></ul>
+      </div>
+      <div id="twinImpactList" class="twin-impact-board"></div>
+    </aside>
+
+    <div class="twin-legend">
+      <span><i style="background:#39DDB3"></i>{{ _('تغطية جيدة') }}</span>
+      <span><i style="background:#F5D76E"></i>{{ _('متوسطة') }}</span>
+      <span><i style="background:#EF526A"></i>{{ _('ضعف / أحمر') }}</span>
+      <span><i class="twin-leg-tower"></i>{{ _('برج') }}</span>
+      <span><i class="twin-leg-new"></i>{{ _('مضاف') }}</span>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<script>
+const BOUNDS = {{ bounds|tojson }};
+const COLORS = {{ colors|tojson }};
+const TOKEN = {{ token|tojson }};
+const CARTO_KEY = {{ (carto_api_key or '')|tojson }};
+const headers = {
+  Authorization: 'Bearer ' + TOKEN,
+  'Content-Type': 'application/json',
+};
+
+const center = [(BOUNDS[1] + BOUNDS[3]) / 2, (BOUNDS[0] + BOUNDS[2]) / 2];
+const map = L.map('twinMap', {
+  zoomControl: false,
+  preferCanvas: true,
+  worldCopyJump: false,
+}).setView(center, 11);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+map.createPane('twinCells');
+map.getPane('twinCells').style.zIndex = 350;
+map.getPane('twinCells').style.pointerEvents = 'none';
+map.createPane('twinHeat');
+map.getPane('twinHeat').style.zIndex = 400;
+map.getPane('twinHeat').style.pointerEvents = 'none';
+map.createPane('twinRings');
+map.getPane('twinRings').style.zIndex = 450;
+map.getPane('twinRings').style.pointerEvents = 'none';
+map.createPane('twinFx');
+map.getPane('twinFx').style.zIndex = 500;
+map.getPane('twinFx').style.pointerEvents = 'none';
+map.createPane('twinLinks');
+map.getPane('twinLinks').style.zIndex = 460;
+map.getPane('twinLinks').style.pointerEvents = 'none';
+map.createPane('twinTowers');
+map.getPane('twinTowers').style.zIndex = 650;
+
+const tiles = CARTO_KEY
+  ? L.tileLayer('https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=' + encodeURIComponent(CARTO_KEY), {
+      attribution: '&copy; OSM &copy; CARTO', maxZoom: 20,
+    })
+  : L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri', maxZoom: 16,
+    });
+tiles.addTo(map);
+
+L.rectangle([[BOUNDS[1], BOUNDS[0]], [BOUNDS[3], BOUNDS[2]]], {
+  color: '#a78bfa', weight: 1.5, fillOpacity: 0.02, dashArray: '8 6', interactive: false,
+}).addTo(map);
+
+const cellsLayer = L.layerGroup({ pane: 'twinCells' }).addTo(map);
+const ringsLayer = L.layerGroup({ pane: 'twinRings' }).addTo(map);
+const linksLayer = L.layerGroup({ pane: 'twinLinks' }).addTo(map);
+const towersLayer = L.layerGroup({ pane: 'twinTowers' }).addTo(map);
+const fxLayer = L.layerGroup({ pane: 'twinFx' }).addTo(map);
+let heatLayer = null;
+
+let state = null;
+let workingTowers = [];
+let selectedId = null;
+let lastSim = null;
+let compareMode = 1;
+let newSeq = 1;
+let syncTimer = null;
+let morphRaf = null;
+let cellShapes = new Map(); // id -> { rect, fromH, toH, fromD, toD, meta }
+let displayHealth = new Map(); // id -> current animated health
+let displayDelta = new Map();
+
+function cloneTowers(list) {
+  return (list || []).map((t) => ({ ...t }));
+}
+function currentTool() {
+  return document.getElementById('toolSelect').value || 'select';
+}
+function selectedTower() {
+  return workingTowers.find((t) => t.id === selectedId) || null;
+}
+function activeCount() {
+  return workingTowers.filter((t) => t.active !== false).length;
+}
+function syncTowerKpis() {
+  document.getElementById('twinTowers').textContent = String(activeCount());
+}
+
+function setGauge(pct) {
+  const arc = document.getElementById('gaugeArc');
+  const len = 157;
+  const p = Math.max(0, Math.min(100, pct));
+  arc.style.strokeDashoffset = String(len - (len * p) / 100);
+  document.getElementById('twinHealth').textContent = Math.round(p) + '%';
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dphi = ((lat2 - lat1) * Math.PI) / 180;
+  const dlmb = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dphi / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dlmb / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+function coverageAt(lat, lon, towers) {
+  let score = 0;
+  let best = null;
+  let bestW = 0;
+  for (const t of towers) {
+    if (t.active === false) continue;
+    const d = haversineKm(lat, lon, t.lat, t.lon);
+    const r = Number(t.radius_km) || 6;
+    const w = (Number(t.capacity) || 1) * Math.exp(-d / Math.max(r, 0.5));
+    if (w < 0.04) continue;
+    score += w;
+    if (w > bestW) {
+      bestW = w;
+      best = t.id;
+    }
+  }
+  return { score, primary_tower: best };
+}
+
+function healthLabel(h) {
+  if (h >= 0.72) return 'good';
+  if (h >= 0.5) return 'moderate';
+  if (h >= 0.32) return 'poor';
+  return 'very_poor';
+}
+
+function enrichHealth(cell, towers) {
+  const cov = coverageAt(cell.lat, cell.lon, towers);
+  const base = cell.observed_base != null ? cell.observed_base : 0.42;
+  const health = 0.55 * base + 0.45 * Math.min(1, cov.score / 1.6);
+  return {
+    health: Math.round(health * 1000) / 1000,
+    health_label: healthLabel(health),
+    primary_tower: cov.primary_tower,
+    coverage_score: Math.round(cov.score * 1000) / 1000,
+  };
+}
+
+/** Instant local twin physics — same formula as server. */
+function computeLive(towers) {
+  if (!state) return null;
+  const baseline = state.towers || [];
+  const cells = state.cells || [];
+  const beforeAvg = cells.reduce((s, c) => s + (c.health || 0), 0) / Math.max(cells.length, 1);
+
+  const viz = [];
+  let afterSum = 0;
+  const impacted = [];
+  const improved = [];
+
+  for (const c of cells) {
+    const after = enrichHealth(c, towers);
+    const beforeH = c.health != null ? c.health : enrichHealth(c, baseline).health;
+    const delta = Math.round((after.health - beforeH) * 1000) / 1000;
+    afterSum += after.health;
+    const row = {
+      id: c.id,
+      bounds: c.bounds,
+      sector: c.sector,
+      lat: c.lat,
+      lon: c.lon,
+      sample_count: c.sample_count || 0,
+      synthetic: !!c.synthetic,
+      health_before: beforeH,
+      health_after: after.health,
+      health_label: after.health_label,
+      delta,
+      primary_tower: after.primary_tower,
+    };
+    if (c.synthetic && Math.abs(delta) < 0.04 && !(c.sample_count > 0)) {
+      // keep sparse synthetic only if moved
+    } else {
+      viz.push(row);
+    }
+    if (delta <= -0.06) impacted.push(row);
+    else if (delta >= 0.06) improved.push(row);
+  }
+
+  impacted.sort((a, b) => a.delta - b.delta);
+  improved.sort((a, b) => b.delta - a.delta);
+  const afterAvg = afterSum / Math.max(cells.length, 1);
+
+  const baseIds = new Set(baseline.map((t) => t.id));
+  const workIds = new Set(towers.map((t) => t.id));
+  const removed = [...baseIds].filter((id) => !workIds.has(id));
+  const disabled = towers.filter((t) => baseIds.has(t.id) && t.active === false).map((t) => t.id);
+  const added = towers.filter((t) => !baseIds.has(t.id));
+
+  const recs = [];
+  if (removed.length || disabled.length) {
+    if (impacted.length) {
+      recs.push(
+        T('الأحياء الأكثر تأثرًا:') + ' ' +
+        impacted.slice(0, 4).map((w) => `${w.sector} (${Math.round(w.delta * 100)}%)`).join('، ')
+      );
+    } else {
+      recs.push(T('التعطل لم يفتح فراغًا كبيرًا — التغطية البديلة تمسك المنطقة.'));
+    }
+  }
+  if (added.length) {
+    if (improved.length) {
+      recs.push(
+        T('البرج الجديد يحسّن:') + ' ' +
+        improved.slice(0, 4).map((w) => `${w.sector} (+${Math.round(w.delta * 100)}%)`).join('، ')
+      );
+      recs.push(T('لاحظ كيف يختفي الأحمر حول الموقع — هذا أثر التغطية اللحظي.'));
+    } else {
+      recs.push(T('قرّب البرج من الخلايا الحمراء لترى تحسّنًا أوضح.'));
+    }
+  }
+  if (!recs.length) recs.push(T('حرّك السعة أو نصف القطر وشاهد الموجة تتغير فورًا.'));
+
+  return {
+    scenario: 'live',
+    before_avg_health: Math.round(beforeAvg * 1000) / 1000,
+    after_avg_health: Math.round(afterAvg * 1000) / 1000,
+    delta_avg_health: Math.round((afterAvg - beforeAvg) * 1000) / 1000,
+    impacted_cells: impacted.slice(0, 20),
+    improved_cells: improved.slice(0, 20),
+    viz_cells: viz.slice(0, 320),
+    towers_after: towers,
+    removed_ids: removed,
+    disabled_ids: disabled,
+    added_towers: added,
+    recommendations: recs,
+  };
+}
+
+function hexToRgb(hex) {
+  if (!hex) return { r: 120, g: 120, b: 120 };
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgbToCss(r, g, b) {
+  return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+}
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+function lerpRgb(a, b, t) {
+  return {
+    r: lerp(a.r, b.r, t),
+    g: lerp(a.g, b.g, t),
+    b: lerp(a.b, b.b, t),
+  };
+}
+
+function colorForHealth(h, delta, mode) {
+  // mode 0 = baseline health palette, 1 = after with impact tint
+  let base;
+  if (h >= 0.72) base = hexToRgb(COLORS.good || '#39DDB3');
+  else if (h >= 0.5) base = hexToRgb(COLORS.moderate || '#F5D76E');
+  else if (h >= 0.32) base = hexToRgb(COLORS.poor || '#FF914D');
+  else base = hexToRgb(COLORS.very_poor || '#EF526A');
+
+  if (mode > 0.55 && delta <= -0.06) {
+    const hot = hexToRgb('#ff1744');
+    const k = Math.min(1, Math.abs(delta) * 4);
+    base = lerpRgb(base, hot, 0.45 + k * 0.45);
+  } else if (mode > 0.55 && delta >= 0.06) {
+    const cool = hexToRgb('#1bced8');
+    const k = Math.min(1, delta * 4);
+    base = lerpRgb(base, cool, 0.35 + k * 0.5);
+  }
+  return base;
+}
+
+function towerIcon(t) {
+  const active = t.active !== false;
+  const kind = t.kind || 'planning';
+  const selected = t.id === selectedId;
+  const cls = [
+    'twin-tower-marker',
+    active ? 'is-on' : 'is-off',
+    kind === 'proposed' ? 'is-new' : '',
+    selected ? 'is-selected' : '',
+  ].join(' ');
+  return L.divIcon({
+    className: 'twin-tower-wrap',
+    html: `<div class="${cls}" title="${t.name}">
+      <i class="twin-tower-pulse"></i>
+      <i class="twin-tower-core"></i>
+      <span>${t.id}</span>
+    </div>`,
+    iconSize: [56, 56],
+    iconAnchor: [28, 28],
+  });
+}
+
+function clearHeat() {
+  if (heatLayer) {
+    map.removeLayer(heatLayer);
+    heatLayer = null;
+  }
+}
+
+function drawHeat(cells) {
+  clearHeat();
+  if (!window.L || !L.heatLayer) return;
+  const pts = [];
+  (cells || []).forEach((c) => {
+    const d = displayDelta.get(c.id);
+    const delta = d != null ? d : (c.delta || 0);
+    if (Math.abs(delta) < 0.035) return;
+    const intensity = Math.min(1, Math.abs(delta) * 2.4);
+    pts.push([c.lat, c.lon, delta < 0 ? intensity : intensity * 0.5]);
+  });
+  if (!pts.length) return;
+  heatLayer = L.heatLayer(pts, {
+    pane: 'twinHeat',
+    radius: 48,
+    blur: 32,
+    maxZoom: 17,
+    minOpacity: 0.28,
+    gradient: {
+      0.0: 'rgba(27,206,216,0)',
+      0.22: '#1bced8',
+      0.45: '#F5D76E',
+      0.7: '#FF914D',
+      1.0: '#ff1744',
+    },
+  }).addTo(map);
+}
+
+function drawLinks(cells, towers) {
+  linksLayer.clearLayers();
+  const byId = Object.fromEntries((towers || []).map((t) => [t.id, t]));
+  (cells || []).slice(0, 90).forEach((c) => {
+    const tid = c.primary_tower;
+    const tower = tid && byId[tid];
+    if (!tower || tower.active === false) return;
+    const delta = displayDelta.get(c.id);
+    const d = delta != null ? delta : (c.delta || 0);
+    if ((c.sample_count || 0) === 0 && Math.abs(d) < 0.04) return;
+    L.polyline([[c.lat, c.lon], [tower.lat, tower.lon]], {
+      color: d < -0.06 ? '#ff375e' : d > 0.06 ? '#1bced8' : 'rgba(167,139,250,0.3)',
+      weight: Math.abs(d) > 0.05 ? 2.4 : 1,
+      opacity: Math.abs(d) > 0.05 ? 0.8 : 0.25,
+      dashArray: Math.abs(d) > 0.05 ? null : '3 8',
+      interactive: false,
+      pane: 'twinLinks',
+    }).addTo(linksLayer);
+  });
+}
+
+function drawRings(towers) {
+  ringsLayer.clearLayers();
+  (towers || []).forEach((t) => {
+    const active = t.active !== false;
+    const r = (t.radius_km || 6) * 1000;
+    const selected = t.id === selectedId;
+    L.circle([t.lat, t.lon], {
+      radius: r,
+      color: !active ? '#6b7280' : t.kind === 'proposed' ? '#1bced8' : selected ? '#fbbf24' : '#8b5cf6',
+      weight: selected ? 2.4 : active ? 1.5 : 1,
+      dashArray: active ? null : '6 10',
+      fillColor: !active ? '#6b7280' : t.kind === 'proposed' ? '#1bced8' : '#7c3aed',
+      fillOpacity: active ? (selected ? 0.11 : 0.07) : 0.02,
+      interactive: false,
+      pane: 'twinRings',
+    }).addTo(ringsLayer);
+  });
+}
+
+function ensureCellRect(c) {
+  let entry = cellShapes.get(c.id);
+  if (entry) return entry;
+  const b = c.bounds;
+  const rect = L.rectangle([[b[1], b[0]], [b[3], b[2]]], {
+    color: '#666',
+    weight: 0.6,
+    fillColor: '#666',
+    fillOpacity: 0.2,
+    interactive: false,
+    pane: 'twinCells',
+    className: 'twin-cell twin-cell-live',
+  }).addTo(cellsLayer);
+  entry = { rect, meta: c };
+  cellShapes.set(c.id, entry);
+  return entry;
+}
+
+function paintCellStyle(id, health, delta, mode) {
+  const entry = cellShapes.get(id);
+  if (!entry) return;
+  const rgb = colorForHealth(health, delta, mode);
+  const fill = 0.18 + Math.max(0.15, health || 0.4) * 0.22;
+  const heavy = Math.abs(delta) >= 0.06 && mode > 0.45;
+  entry.rect.setStyle({
+    color: rgbToCss(rgb.r, rgb.g, rgb.b),
+    fillColor: rgbToCss(rgb.r, rgb.g, rgb.b),
+    fillOpacity: heavy ? Math.min(0.72, fill + 0.18) : fill,
+    weight: heavy ? 1.8 : 0.55,
+  });
+  const el = entry.rect.getElement && entry.rect.getElement();
+  if (el) {
+    el.classList.toggle('twin-cell-hit', heavy && delta < 0);
+    el.classList.toggle('twin-cell-heal', heavy && delta > 0);
+  }
+}
+
+function syncCellLayer(cells, mode, { morph = false, duration = 520 } = {}) {
+  const keep = new Set();
+  const targets = [];
+
+  (cells || []).forEach((c) => {
+    keep.add(c.id);
+    ensureCellRect(c);
+    const fromH = displayHealth.has(c.id)
+      ? displayHealth.get(c.id)
+      : (c.health_before != null ? c.health_before : c.health || 0.42);
+    const toH = mode < 0.5
+      ? (c.health_before != null ? c.health_before : c.health || fromH)
+      : (c.health_after != null ? c.health_after : c.health || fromH);
+    const fromD = displayDelta.has(c.id) ? displayDelta.get(c.id) : 0;
+    const toD = mode < 0.5 ? 0 : (c.delta || 0);
+    targets.push({ id: c.id, fromH, toH, fromD, toD, cell: c });
+  });
+
+  for (const [id, entry] of [...cellShapes.entries()]) {
+    if (!keep.has(id)) {
+      cellsLayer.removeLayer(entry.rect);
+      cellShapes.delete(id);
+      displayHealth.delete(id);
+      displayDelta.delete(id);
+    }
+  }
+
+  if (!morph || duration <= 0) {
+    targets.forEach((t) => {
+      displayHealth.set(t.id, t.toH);
+      displayDelta.set(t.id, t.toD);
+      paintCellStyle(t.id, t.toH, t.toD, mode);
+    });
+    return Promise.resolve();
+  }
+
+  if (morphRaf) cancelAnimationFrame(morphRaf);
+  const t0 = performance.now();
+  return new Promise((resolve) => {
+    const step = (now) => {
+      const u = Math.min(1, (now - t0) / duration);
+      // ease-out cubic — red fades fast then settles
+      const e = 1 - Math.pow(1 - u, 3);
+      targets.forEach((t) => {
+        const h = lerp(t.fromH, t.toH, e);
+        const d = lerp(t.fromD, t.toD, e);
+        displayHealth.set(t.id, h);
+        displayDelta.set(t.id, d);
+        paintCellStyle(t.id, h, d, mode);
+      });
+      if (u < 1) morphRaf = requestAnimationFrame(step);
+      else {
+        morphRaf = null;
+        resolve();
+      }
+    };
+    morphRaf = requestAnimationFrame(step);
+  });
+}
+
+function drawTowers(towers) {
+  towersLayer.clearLayers();
+  (towers || []).forEach((t) => {
+    const m = L.marker([t.lat, t.lon], {
+      icon: towerIcon(t),
+      riseOnHover: true,
+      pane: 'twinTowers',
+      keyboard: false,
+    });
+    m.bindPopup(
+      `<div class="twin-pop">
+        <strong>${t.name}</strong>
+        <span>${t.sector || ''}</span>
+        <em>${t.active === false ? T('متوقف في السيناريو') : T('نشط')}</em>
+        <small>${T('نصف القطر')}: ${t.radius_km || '—'} km · ${T('السعة')}: ${t.capacity || '—'}</small>
+        <div class="twin-pop-actions">
+          <button type="button" class="twin-pop-btn" data-act="toggle">${t.active === false ? T('تشغيل') : T('تعطيل')}</button>
+          <button type="button" class="twin-pop-btn twin-pop-del" data-act="delete">${T('حذف')}</button>
+        </div>
+      </div>`
+    );
+    m.on('popupopen', () => {
+      const el = m.getPopup().getElement();
+      if (!el) return;
+      el.querySelectorAll('[data-act]').forEach((btn) => {
+        btn.onclick = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          selectTower(t.id, { repaint: false });
+          if (btn.getAttribute('data-act') === 'toggle') toggleSelected();
+          else deleteSelected();
+          m.closePopup();
+        };
+      });
+    });
+    m.on('click', (ev) => {
+      L.DomEvent.stopPropagation(ev);
+      onTowerClick(t.id);
+    });
+    m.addTo(towersLayer);
+  });
+}
+
+function nearestTower(latlng, maxKm) {
+  let best = null;
+  let bestKm = maxKm == null ? 4.5 : maxKm;
+  workingTowers.forEach((t) => {
+    const d = map.distance(latlng, L.latLng(t.lat, t.lon)) / 1000;
+    if (d < bestKm) {
+      bestKm = d;
+      best = t;
+    }
+  });
+  return best;
+}
+
+function spawnShockwave(lat, lon, { heal = true } = {}) {
+  const color = heal ? '#1bced8' : '#ff375e';
+  const ring = L.circle([lat, lon], {
+    radius: 180,
+    color,
+    weight: 3,
+    fillColor: color,
+    fillOpacity: 0.22,
+    interactive: false,
+    pane: 'twinFx',
+    className: 'twin-shock',
+  }).addTo(fxLayer);
+  const t0 = performance.now();
+  const dur = 700;
+  const maxR = 9000;
+  const tick = (now) => {
+    const u = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - u, 2);
+    ring.setRadius(180 + e * maxR);
+    ring.setStyle({
+      opacity: 1 - e,
+      fillOpacity: 0.22 * (1 - e),
+      weight: 3 - e * 2,
+    });
+    if (u < 1) requestAnimationFrame(tick);
+    else fxLayer.removeLayer(ring);
+  };
+  requestAnimationFrame(tick);
+}
+
+function fillIntel(data) {
+  document.getElementById('twinResult').hidden = false;
+  document.getElementById('compareWrap').hidden = false;
+
+  const d = Math.round((data.delta_avg_health || 0) * 100);
+  document.getElementById('twinDelta').textContent =
+    T('تغير صحة النموذج:') + ' ' + (d >= 0 ? '+' : '') + d + '%  ·  '
+    + Math.round((data.before_avg_health || 0) * 100) + '% → '
+    + Math.round((data.after_avg_health || 0) * 100) + '%';
+
+  const pill = document.getElementById('twinDeltaPill');
+  pill.hidden = false;
+  document.getElementById('twinDeltaValue').textContent = (d >= 0 ? '+' : '') + d + '%';
+  pill.classList.toggle('is-up', d >= 0);
+  pill.classList.toggle('is-down', d < 0);
+  setGauge((data.after_avg_health || 0) * 100);
+
+  document.getElementById('twinRecs').innerHTML =
+    (data.recommendations || []).map((r) => `<li>${r}</li>`).join('');
+
+  const impacted = data.impacted_cells || [];
+  const improved = data.improved_cells || [];
+  const bars = [...impacted.slice(0, 4), ...improved.slice(0, 3)];
+  document.getElementById('twinBars').innerHTML = bars.map((x) => {
+    const pct = Math.round(Math.abs(x.delta) * 100);
+    const down = x.delta < 0;
+    return `<div class="twin-bar-row ${down ? 'down' : 'up'}">
+      <span>${x.sector}</span>
+      <div class="twin-bar-track"><i style="width:${Math.min(100, pct * 1.6)}%"></i></div>
+      <b>${down ? '' : '+'}${Math.round(x.delta * 100)}%</b>
+    </div>`;
+  }).join('') || `<p class="twin-hint">${T('لا حركة كبيرة في هذا السيناريو')}</p>`;
+
+  document.getElementById('twinImpactList').innerHTML =
+    (impacted.length
+      ? `<div class="twin-board-block"><h4>${T('أحياء متأثرة')}</h4>${impacted.slice(0, 6).map((x) =>
+          `<button type="button" class="twin-chip down" data-bounds='${JSON.stringify(x.bounds)}'>${x.sector} ${Math.round(x.delta * 100)}%</button>`
+        ).join('')}</div>`
+      : '')
+    + (improved.length
+      ? `<div class="twin-board-block"><h4>${T('أحياء تحسّنت')}</h4>${improved.slice(0, 6).map((x) =>
+          `<button type="button" class="twin-chip up" data-bounds='${JSON.stringify(x.bounds)}'>${x.sector} +${Math.round(x.delta * 100)}%</button>`
+        ).join('')}</div>`
+      : '');
+
+  document.querySelectorAll('#twinImpactList [data-bounds]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const b = JSON.parse(btn.getAttribute('data-bounds'));
+      map.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [50, 50], maxZoom: 13 });
+    });
+  });
+}
+
+async function applyLive({ morph = true, epicenter = null, heal = true } = {}) {
+  if (!state) return;
+  const data = computeLive(workingTowers);
+  if (!data) return;
+  lastSim = data;
+  compareMode = 1;
+  document.getElementById('compareSlider').value = '100';
+  fillIntel(data);
+  syncTowerKpis();
+  drawRings(workingTowers);
+  drawTowers(workingTowers);
+
+  if (epicenter) spawnShockwave(epicenter.lat, epicenter.lon, { heal });
+
+  const cells = data.viz_cells || [];
+  await syncCellLayer(cells, 1, { morph, duration: morph ? 560 : 0 });
+  drawLinks(cells, workingTowers);
+  drawHeat(cells);
+
+  document.getElementById('twinNote').textContent =
+    T('أثر لحظي:') + ' ' + activeCount() + ' ' + T('أبراج نشطة')
+    + (data.improved_cells.length ? ' · ↑' + data.improved_cells.length + ' ' + T('أحياء تحسّنت') : '')
+    + (data.impacted_cells.length ? ' · ↓' + data.impacted_cells.length + ' ' + T('أحياء متأثرة') : '');
+
+  // Soft server sync for parity (does not block the visuals).
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => softSyncServer(), 700);
+}
+
+async function softSyncServer() {
+  try {
+    const res = await fetch('/api/digital-twin/simulate', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ scenario: 'sandbox', towers: workingTowers }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    // Keep live map; only refresh intel text if server agrees directionally.
+    if (data && data.recommendations) {
+      lastSim = { ...lastSim, ...data, viz_cells: lastSim.viz_cells };
+      fillIntel(lastSim);
+    }
+  } catch (_) { /* ignore */ }
+}
+
+function paintScene() {
+  if (!state) return;
+  if (lastSim) {
+    const cells = lastSim.viz_cells || [];
+    syncCellLayer(cells, compareMode, { morph: false });
+    drawRings(workingTowers);
+    drawTowers(workingTowers);
+    drawLinks(cells, workingTowers);
+    if (compareMode > 0.45) drawHeat(cells);
+    else clearHeat();
+  } else {
+    const cells = (state.cells || []).map((c) => ({
+      ...c,
+      health_before: c.health,
+      health_after: c.health,
+      delta: 0,
+    }));
+    syncCellLayer(cells, 1, { morph: false });
+    drawRings(workingTowers);
+    drawTowers(workingTowers);
+    drawLinks(cells.filter((c) => (c.sample_count || 0) > 0), workingTowers);
+    clearHeat();
+  }
+  syncTowerKpis();
+}
+
+function syncSelectedPanel() {
+  const t = selectedTower();
+  const panel = document.getElementById('selectedPanel');
+  if (!t) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  document.getElementById('selName').textContent = t.name;
+  document.getElementById('selId').textContent = t.id;
+  document.getElementById('selSector').textContent = t.sector || '';
+  document.getElementById('towerRadius').value = String(t.radius_km || 6.5);
+  document.getElementById('radiusVal').textContent = String(t.radius_km || 6.5);
+  document.getElementById('towerCapacity').value = String(t.capacity || 1);
+  document.getElementById('capVal').textContent = Number(t.capacity || 1).toFixed(2);
+  document.getElementById('btnToggleTower').textContent =
+    t.active === false ? T('تشغيل البرج') : T('تعطيل البرج');
+}
+
+function selectTower(id, { repaint = true } = {}) {
+  selectedId = id;
+  syncSelectedPanel();
+  if (repaint) {
+    drawRings(workingTowers);
+    drawTowers(workingTowers);
+  }
+}
+
+function onTowerClick(id) {
+  const tool = currentTool();
+  if (tool === 'disable') {
+    selectTower(id, { repaint: false });
+    toggleSelected();
+  } else if (tool === 'delete') {
+    selectTower(id, { repaint: false });
+    deleteSelected();
+  } else {
+    selectTower(id);
+  }
+}
+
+function addTowerAt(lat, lon) {
+  const id = 'NEW-' + String(newSeq++).padStart(2, '0');
+  const tower = {
+    id,
+    name: T('برج مقترح') + ' ' + id,
+    lat: Number(lat.toFixed(5)),
+    lon: Number(lon.toFixed(5)),
+    sector: '',
+    capacity: 1.35,
+    radius_km: 7.5,
+    kind: 'proposed',
+    active: true,
+  };
+  workingTowers.push(tower);
+  selectTower(id, { repaint: false });
+  applyLive({ morph: true, epicenter: { lat, lon }, heal: true });
+}
+
+function toggleSelected() {
+  const t = selectedTower();
+  if (!t) return;
+  const wasActive = t.active !== false;
+  t.active = !wasActive;
+  syncSelectedPanel();
+  applyLive({
+    morph: true,
+    epicenter: { lat: t.lat, lon: t.lon },
+    heal: !wasActive,
+  });
+}
+
+function deleteSelected() {
+  const t = selectedTower();
+  if (!t) return;
+  const epic = { lat: t.lat, lon: t.lon };
+  workingTowers = workingTowers.filter((x) => x.id !== t.id);
+  selectedId = null;
+  syncSelectedPanel();
+  applyLive({ morph: true, epicenter: epic, heal: false });
+}
+
+function syncToolUI() {
+  const tool = currentTool();
+  document.querySelectorAll('.twin-tool-grid .twin-scenario').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.tool === tool);
+  });
+  const hints = {
+    select: T('الأثر يتحدّث في نفس اللحظة — لا انتظار.'),
+    add: T('انقر الخريطة: موجة تغطية فورية ويبدأ الأحمر بالاختفاء.'),
+    disable: T('انقر برجًا لإطفائه — شاهد الأحمر يعود للمنطقة.'),
+    delete: T('انقر برجًا لحذفه — فراغ التغطية يظهر فورًا.'),
+  };
+  document.getElementById('toolHint').textContent = hints[tool] || hints.select;
+  map.getContainer().style.cursor = tool === 'add' ? 'crosshair' : '';
+}
+
+document.querySelectorAll('.twin-tool-grid .twin-scenario').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.getElementById('toolSelect').value = btn.dataset.tool;
+    syncToolUI();
+  });
+});
+syncToolUI();
+
+map.on('click', (e) => {
+  const tool = currentTool();
+  if (tool === 'add') {
+    addTowerAt(e.latlng.lat, e.latlng.lng);
+    return;
+  }
+  const near = nearestTower(e.latlng, tool === 'select' ? 3.2 : 5.5);
+  if (near) onTowerClick(near.id);
+});
+
+document.getElementById('btnToggleTower').onclick = () => toggleSelected();
+document.getElementById('btnDeleteTower').onclick = () => deleteSelected();
+
+let radiusLiveTimer = null;
+document.getElementById('towerRadius').addEventListener('input', (e) => {
+  const t = selectedTower();
+  if (!t) return;
+  t.radius_km = Number(e.target.value);
+  document.getElementById('radiusVal').textContent = String(t.radius_km);
+  drawRings(workingTowers);
+  if (radiusLiveTimer) clearTimeout(radiusLiveTimer);
+  radiusLiveTimer = setTimeout(() => applyLive({ morph: true, epicenter: { lat: t.lat, lon: t.lon }, heal: true }), 60);
+});
+document.getElementById('towerCapacity').addEventListener('input', (e) => {
+  const t = selectedTower();
+  if (!t) return;
+  t.capacity = Number(e.target.value);
+  document.getElementById('capVal').textContent = t.capacity.toFixed(2);
+  if (radiusLiveTimer) clearTimeout(radiusLiveTimer);
+  radiusLiveTimer = setTimeout(() => applyLive({ morph: true, epicenter: { lat: t.lat, lon: t.lon }, heal: true }), 60);
+});
+
+document.getElementById('compareSlider').addEventListener('input', (e) => {
+  compareMode = Number(e.target.value) / 100;
+  if (!lastSim) return;
+  syncCellLayer(lastSim.viz_cells || [], compareMode, { morph: false });
+  if (compareMode > 0.45) drawHeat(lastSim.viz_cells || []);
+  else clearHeat();
+});
+
+document.getElementById('btnResetTwin').onclick = () => {
+  if (!state) return;
+  workingTowers = cloneTowers(state.towers);
+  selectedId = null;
+  lastSim = null;
+  newSeq = 1;
+  displayHealth.clear();
+  displayDelta.clear();
+  document.getElementById('twinResult').hidden = true;
+  document.getElementById('compareWrap').hidden = true;
+  document.getElementById('twinDeltaPill').hidden = true;
+  setGauge((state.avg_health || 0) * 100);
+  syncSelectedPanel();
+  paintScene();
+  document.getElementById('twinNote').textContent =
+    (state.note || '') + ' — ' + T('أضف برجًا وشاهد الأحمر يختفي فورًا.');
+};
+
+async function loadTwin() {
+  const res = await fetch('/api/digital-twin', { headers });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || T('تعذر التحميل'));
+  state = await res.json();
+  workingTowers = cloneTowers(state.towers);
+  setGauge((state.avg_health || 0) * 100);
+  document.getElementById('twinMeasured').textContent = String(state.measured_cells || 0);
+  document.getElementById('twinNote').textContent =
+    (state.note || '') + ' — ' + T('أضف برجًا وشاهد الأحمر يختفي فورًا.');
+  lastSim = null;
+  selectedId = null;
+  syncSelectedPanel();
+  paintScene();
+  map.fitBounds([[BOUNDS[1], BOUNDS[0]], [BOUNDS[3], BOUNDS[2]]], { padding: [40, 40] });
+  setTimeout(() => map.invalidateSize(), 160);
+}
+
+loadTwin().catch((e) => {
+  document.getElementById('twinNote').textContent = e.message || String(e);
+});
+</script>
+{% endblock %}

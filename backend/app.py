@@ -1,7 +1,7 @@
 """SmartCare Flask entrypoint: website + JSON API for the mobile app.
 
-Run locally:
-  python -m flask --app backend.flask_app:app run --host 127.0.0.1 --port 8765
+Run locally (standalone website):
+  python backend/run_web.py          # or double-click backend/run_web.bat
 
 Production (Render):
   gunicorn -b 0.0.0.0:$PORT -w 1 --threads 8 backend.flask_app:app

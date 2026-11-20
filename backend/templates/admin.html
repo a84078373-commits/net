@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}لوحة تحكم المدير{% endblock %}
+{% block title %}{{ _('لوحة تحكم المدير') }}{% endblock %}
 {% block content %}
-<section class="panel" aria-labelledby="admin-title">
-  <h1 id="admin-title">لوحة تحكم المدير</h1>
+<section class="panel card" aria-labelledby="admin-title">
+  <h1 id="admin-title">{{ _('لوحة تحكم المدير') }}</h1>
   <p class="muted">{{ user.name }} • {{ user.phone }}</p>
-  <div class="tabs" role="tablist" aria-label="أقسام لوحة المدير">
-    <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="overview">نظرة عامة</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="users">المستخدمون</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="measurements">القياسات</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="ai">الذكاء والضبط</button>
+  <div class="tabs" role="tablist" aria-label="{{ _('أقسام لوحة المدير') }}">
+    <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="overview">{{ _('نظرة عامة') }}</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="users">{{ _('المستخدمون') }}</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="measurements">{{ _('القياسات') }}</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="ai">{{ _('الذكاء والضبط') }}</button>
   </div>
   <div id="msg" class="alert" hidden role="alert"></div>
   <div id="overview" class="tabpane active" role="tabpanel"></div>
@@ -16,26 +16,47 @@
   <div id="measurements" class="tabpane" role="tabpanel"></div>
   <div id="ai" class="tabpane" role="tabpanel">
     <p class="muted">
-      احفظ مفتاح Gemini <strong>مرة واحدة</strong> هنا. يُخزَّن في قاعدة بيانات الخادم ويُستخدم تلقائيًا
-      لكل المستخدمين في الويب والتطبيق عبر صفحة/شاشة الذكاء — بدون إعادة إدخال.
+      {{ _('احفظ مفتاح Gemini مرة واحدة هنا. يُخزَّن في قاعدة بيانات الخادم ويُستخدم تلقائيًا لكل المستخدمين في الويب والتطبيق عبر صفحة/شاشة الذكاء — بدون إعادة إدخال.') }}
     </p>
     <div class="stack">
-      <label for="gemini">مفتاح Gemini (للخادم بالكامل)
-        <input id="gemini" type="password" autocomplete="off" placeholder="اتركه فارغًا لإعادة الافتراضي، أو الصق مفتاحًا جديدًا">
+      <label for="gemini">{{ _('مفتاح Gemini (للخادم بالكامل)') }}
+        <input id="gemini" type="password" autocomplete="off" dir="ltr" placeholder="{{ _('اتركه فارغًا لإعادة الافتراضي، أو الصق مفتاحًا جديدًا') }}">
       </label>
-      <p class="muted">يوجد مفتاح افتراضي جاهز؛ احفظ مفتاحًا جديدًا لاستبداله، أو احفظ حقلًا فارغًا للرجوع للافتراضي.</p>
+      <p class="muted">{{ _('يوجد مفتاح افتراضي جاهز؛ احفظ مفتاحًا جديدًا لاستبداله، أو احفظ حقلًا فارغًا للرجوع للافتراضي.') }}</p>
       <div class="row">
-        <button type="button" id="saveKey" class="primary">حفظ في قاعدة البيانات</button>
+        <button type="button" id="saveKey" class="primary">{{ _('حفظ في قاعدة البيانات') }}</button>
       </div>
       <p id="keyStatus" class="muted"></p>
     </div>
     <hr class="divider">
     <div class="stack">
-      <label for="analyzeText">تجربة تحليل (نفس المفتاح المحفوظ للجميع)
-        <textarea id="analyzeText" rows="4" placeholder="صف مشكلة شبكة مثل: ضعف التحميل مساءً في وسط حائل"></textarea>
+      <h2 class="section-title">{{ _('واتساب عبر GREEN API') }}</h2>
+      <p class="muted">{{ _('اربط حساب GREEN API لإرسال رموز التحقق على واتساب عند التسجيل/الدخول.') }}</p>
+      <label class="row" style="gap:0.5rem;align-items:center;font-weight:700">
+        <input type="checkbox" id="greenEnabled" style="width:1.1rem;height:1.1rem;min-height:auto">
+        {{ _('تفعيل إرسال واتساب') }}
+      </label>
+      <label for="greenUrl">{{ _('رابط API') }}
+        <input id="greenUrl" dir="ltr" placeholder="https://api.greenapi.com" value="https://api.greenapi.com">
+      </label>
+      <label for="greenId">{{ _('idInstance') }}
+        <input id="greenId" dir="ltr" autocomplete="off" placeholder="1101…">
+      </label>
+      <label for="greenToken">{{ _('apiTokenInstance') }}
+        <input id="greenToken" type="password" dir="ltr" autocomplete="off" placeholder="{{ _('الصق التوكن أو اتركه فارغًا للإبقاء على الحالي') }}">
+      </label>
+      <p id="greenStatus" class="muted"></p>
+      <div class="row">
+        <button type="button" id="saveGreen" class="primary">{{ _('حفظ GREEN API') }}</button>
+      </div>
+    </div>
+    <hr class="divider">
+    <div class="stack">
+      <label for="analyzeText">{{ _('تجربة تحليل (نفس المفتاح المحفوظ للجميع)') }}
+        <textarea id="analyzeText" rows="4" placeholder="{{ _('صف مشكلة شبكة مثل: ضعف التحميل مساءً في وسط حائل') }}"></textarea>
       </label>
       <div class="row">
-        <button type="button" id="runAnalyze" class="primary">حلّل الآن</button>
+        <button type="button" id="runAnalyze" class="primary">{{ _('حلّل الآن') }}</button>
       </div>
       <pre id="analysis" class="box" aria-live="polite"></pre>
     </div>
@@ -45,6 +66,7 @@
 {% block scripts %}
 <script>
 const TOKEN = {{ token|tojson }};
+const DATE_LOCALE = window.LANG === 'en' ? 'en-GB' : 'ar-SA';
 async function api(path, opts={}) {
   const method = (opts.method || 'GET').toUpperCase();
   const headers = Object.assign({'Authorization': 'Bearer ' + TOKEN}, opts.headers || {});
@@ -53,7 +75,7 @@ async function api(path, opts={}) {
   }
   const res = await fetch(path, Object.assign({}, opts, {method, headers}));
   if (!res.ok) {
-    let d = 'خطأ ' + res.status;
+    let d = T('خطأ {code}', {code: res.status});
     try { d = (await res.json()).detail || d; } catch (_) {}
     throw new Error(d);
   }
@@ -85,35 +107,42 @@ async function reload() {
     ]);
     document.getElementById('overview').innerHTML = `
       <div class="metrics">
-        <div><span>${o.users}</span><small>مستخدمون</small></div>
-        <div><span>${o.admins||0}</span><small>مدراء</small></div>
-        <div><span>${o.measurements}</span><small>قياسات</small></div>
-        <div><span>${o.shared_measurements}</span><small>على الخريطة</small></div>
+        <div><span>${o.users}</span><small>${T('مستخدمون')}</small></div>
+        <div><span>${o.admins||0}</span><small>${T('مدراء')}</small></div>
+        <div><span>${o.measurements}</span><small>${T('قياسات')}</small></div>
+        <div><span>${o.shared_measurements}</span><small>${T('على الخريطة')}</small></div>
       </div>
       <div class="stack-tight" style="margin-top:1rem">
-        <p class="muted">متوسط ↓ ${(o.avg_download_mbps??0).toFixed?.(1) ?? '—'} • ↑ ${(o.avg_upload_mbps??0).toFixed?.(1) ?? '—'} • بنق ${(o.avg_ping_ms??0).toFixed?.(0) ?? '—'}</p>
-        <p class="muted">Gemini: ${o.gemini_configured?'مضبوط':'غير مضبوط'} • Speed: ${o.speed_enabled?'مفعّل':'متوقف'}</p>
+        <p class="muted">${T('متوسط')} ↓ ${(o.avg_download_mbps??0).toFixed?.(1) ?? '—'} • ↑ ${(o.avg_upload_mbps??0).toFixed?.(1) ?? '—'} • ${T('بنق')} ${(o.avg_ping_ms??0).toFixed?.(0) ?? '—'}</p>
+        <p class="muted">Gemini: ${o.gemini_configured?T('مضبوط'):T('غير مضبوط')} • Speed: ${o.speed_enabled?T('مفعّل'):T('متوقف')}</p>
         <p class="muted">Origin: ${o.public_origin||'—'}</p>
-        <p class="muted">قاعدة البيانات: ${o.db_path||'—'} • ${o.db_persistent?'تخزين دائم ✓':'تخزين مؤقت ✗'}</p>
+        <p class="muted">${T('قاعدة البيانات:')} ${o.db_path||'—'} • ${o.db_persistent?T('تخزين دائم ✓'):T('تخزين مؤقت ✗')}</p>
         ${o.persistence_hint?`<div class="alert" role="alert">${o.persistence_hint}</div>`:''}
       </div>`;
-    document.getElementById('users').innerHTML = `<p class="muted">${u.count ?? (u.items||[]).length} حساب محفوظ في قاعدة البيانات • الجلسة حتى تسجيل الخروج</p>` + ((u.items||[]).map(x => {
-      const created = x.created_at_iso ? new Date(x.created_at_iso).toLocaleString('ar-SA') : '—';
+    document.getElementById('users').innerHTML = `<p class="muted">${T('{count} حساب محفوظ في قاعدة البيانات • الجلسة حتى تسجيل الخروج', {count: u.count ?? (u.items||[]).length})}</p>` + ((u.items||[]).map(x => {
+      const created = x.created_at_iso ? new Date(x.created_at_iso).toLocaleString(DATE_LOCALE) : '—';
       return `
       <div class="rowcard">
-        <div><strong>${x.name}</strong><br><span class="muted">${x.phone}${x.gender_label?' • '+x.gender_label:''} • ${x.tests} قياس${x.is_admin?' • مدير':''}<br>${[x.first_name,x.second_name,x.family_name].filter(Boolean).join(' ') || ''}<br>أُنشئ: ${created}</span></div>
-        ${x.is_admin?'':`<button type="button" data-del-user="${x.id}" class="danger">حذف</button>`}
+        <div><strong>${x.name}</strong><br><span class="muted">${x.phone}${x.gender_label?' • '+x.gender_label:''} • ${T('{count} قياس', {count: x.tests})}${x.is_admin?' • '+T('مدير'):''}<br>${[x.first_name,x.second_name,x.family_name].filter(Boolean).join(' ') || ''}<br>${T('أُنشئ:')} ${created}</span></div>
+        ${x.is_admin?'':`<button type="button" data-del-user="${x.id}" class="danger">${T('حذف')}</button>`}
       </div>`;
-    }).join('') || '<p class="muted">لا مستخدمين</p>');
+    }).join('') || `<p class="muted">${T('لا مستخدمين')}</p>`);
     document.getElementById('measurements').innerHTML = (m.items||[]).map(x => `
       <div class="rowcard">
         <div><strong>${x.phone}</strong><br><span class="muted">↓ ${(x.download_mbps||0).toFixed(1)} • ↑ ${(x.upload_mbps||0).toFixed(1)} • ${(x.ping_ms||0).toFixed(0)} ms • ${x.connection_type}</span></div>
-        <button type="button" data-del-m="${x.id}" class="danger">حذف</button>
-      </div>`).join('') || '<p class="muted">لا قياسات</p>';
+        <button type="button" data-del-m="${x.id}" class="danger">${T('حذف')}</button>
+      </div>`).join('') || `<p class="muted">${T('لا قياسات')}</p>`;
     document.getElementById('keyStatus').textContent = s.gemini_api_key_masked
-      ? ('المفتاح الحالي: ' + s.gemini_api_key_masked) : 'لا يوجد مفتاح محفوظ';
+      ? (T('المفتاح الحالي: ') + s.gemini_api_key_masked) : T('لا يوجد مفتاح محفوظ');
+    const g = s.green_api || {};
+    document.getElementById('greenEnabled').checked = !!g.enabled;
+    document.getElementById('greenUrl').value = g.api_url || 'https://api.greenapi.com';
+    document.getElementById('greenId').value = g.id_instance || '';
+    document.getElementById('greenStatus').textContent = g.token_instance_set
+      ? (T('توكن GREEN API: ') + (g.token_instance_masked || T('مضبوط')) + (g.enabled ? ' • ' + T('مفعّل') : ' • ' + T('متوقف')))
+      : T('لا يوجد توكن GREEN API محفوظ');
     document.querySelectorAll('[data-del-user]').forEach(b => b.onclick = async () => {
-      if (!confirm('حذف المستخدم؟')) return;
+      if (!confirm(T('حذف المستخدم؟'))) return;
       try { await api('/api/admin/users/' + b.dataset.delUser, {method:'DELETE'}); await reload(); }
       catch(e){ show(e.message); }
     });
@@ -126,7 +155,7 @@ async function reload() {
 document.getElementById('saveKey').onclick = async () => {
   const btn = document.getElementById('saveKey');
   const key = document.getElementById('gemini').value.trim();
-  if (!key) { show('الصق مفتاح Gemini ثم احفظ'); return; }
+  if (!key) { show(T('الصق مفتاح Gemini ثم احفظ')); return; }
   if (btn.disabled) return;
   btn.disabled = true;
   try {
@@ -137,22 +166,42 @@ document.getElementById('saveKey').onclick = async () => {
     document.getElementById('gemini').value = '';
     await reload();
     show('');
-    alert('تم حفظ مفتاح Gemini');
+    alert(T('تم حفظ مفتاح Gemini'));
   } catch(e){ show(e.message); }
+  finally { btn.disabled = false; }
+};
+document.getElementById('saveGreen').onclick = async () => {
+  const btn = document.getElementById('saveGreen');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const body = {
+      green_api_enabled: document.getElementById('greenEnabled').checked,
+      green_api_url: document.getElementById('greenUrl').value.trim(),
+      green_api_id_instance: document.getElementById('greenId').value.trim(),
+    };
+    const tok = document.getElementById('greenToken').value.trim();
+    if (tok) body.green_api_token_instance = tok;
+    const r = await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
+    document.getElementById('greenToken').value = '';
+    await reload();
+    show('');
+    alert(r.note || T('تم حفظ إعدادات GREEN API لواتساب'));
+  } catch (e) { show(e.message); }
   finally { btn.disabled = false; }
 };
 document.getElementById('runAnalyze').onclick = async () => {
   const btn = document.getElementById('runAnalyze');
   const text = document.getElementById('analyzeText').value.trim();
   if (text.length < 3) {
-    show('اكتب نص التحليل أولًا (مثال: ضعف التحميل في حي النقرة)');
+    show(T('اكتب نص التحليل أولًا (مثال: ضعف التحميل في حي النقرة)'));
     return;
   }
   if (btn.disabled) return;
   btn.disabled = true;
   try {
     show('');
-    document.getElementById('analysis').textContent = 'جارٍ التحليل…';
+    document.getElementById('analysis').textContent = T('جارٍ التحليل…');
     const r = await api('/api/ai/analyze', {
       method: 'POST',
       body: JSON.stringify({text})

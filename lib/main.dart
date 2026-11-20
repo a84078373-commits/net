@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'app_store.dart';
+import 'l10n/app_localizations.dart';
 import 'mystc_pages.dart';
 import 'network/network_api.dart';
 import 'theme.dart';
@@ -27,17 +28,40 @@ Future<void> main() async {
 class SmartCare extends StatelessWidget {
   const SmartCare({super.key});
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    title: 'SmartCare • حائل',
-    locale: const Locale('ar', 'SA'),
-    supportedLocales: const [Locale('ar', 'SA')],
-    localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: stcTheme(),
-    home: const Directionality(
-      textDirection: TextDirection.rtl,
-      child: AppRoot(),
-    ),
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: appStore,
+    builder: (context, _) {
+      final locale = appStore.locale;
+      final isAr = locale.languageCode != 'en';
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: isAr ? 'SmartCare • حائل' : 'SmartCare • Hail',
+        locale: locale,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        localeResolutionCallback: (device, supported) {
+          if (device == null) return locale;
+          for (final s in supported) {
+            if (s.languageCode == device.languageCode) return s;
+          }
+          return locale;
+        },
+        theme: stcTheme(locale: locale),
+        builder: (context, child) {
+          final l10n = AppLocalizations.of(context);
+          return Directionality(
+            textDirection: l10n.textDirection,
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
+        home: const AppRoot(),
+      );
+    },
   );
 }
 
@@ -76,6 +100,7 @@ class _AppRootState extends State<AppRoot> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     if (splash) {
       return MystcSplash(onDone: () {
         if (mounted) setState(() => splash = false);
@@ -104,26 +129,26 @@ class _AppRootState extends State<AppRoot> {
         child: NavigationBar(
           selectedIndex: page,
           onDestinationSelected: (i) => setState(() => page = i),
-          destinations: const [
+          destinations: [
             NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'الرئيسية',
+              icon: const Icon(Icons.home_outlined),
+              selectedIcon: const Icon(Icons.home_rounded),
+              label: l10n.navHome,
             ),
             NavigationDestination(
-              icon: Icon(Icons.shopping_bag_outlined),
-              selectedIcon: Icon(Icons.shopping_bag_rounded),
-              label: 'المتجر',
+              icon: const Icon(Icons.shopping_bag_outlined),
+              selectedIcon: const Icon(Icons.shopping_bag_rounded),
+              label: l10n.navStore,
             ),
             NavigationDestination(
-              icon: Icon(Icons.loyalty_outlined),
-              selectedIcon: Icon(Icons.loyalty_rounded),
-              label: 'قطاف',
+              icon: const Icon(Icons.loyalty_outlined),
+              selectedIcon: const Icon(Icons.loyalty_rounded),
+              label: l10n.navQitaf,
             ),
             NavigationDestination(
-              icon: Icon(Icons.menu_rounded),
-              selectedIcon: Icon(Icons.menu_rounded),
-              label: 'المزيد',
+              icon: const Icon(Icons.menu_rounded),
+              selectedIcon: const Icon(Icons.menu_rounded),
+              label: l10n.navMore,
             ),
           ],
         ),

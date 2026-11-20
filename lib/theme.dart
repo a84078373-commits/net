@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Official stc brand tokens from the public brand booklet,
 /// applied in the visual language of the 2026 mystc SA app.
@@ -44,19 +45,11 @@ class StcRadii {
   static const pill = 28.0;
 }
 
-ThemeData stcTheme() {
-  const text = TextTheme(
-    bodyMedium: TextStyle(color: StcColors.onyx, height: 1.45),
-    titleLarge: TextStyle(
-      color: StcColors.onyx,
-      fontWeight: FontWeight.w700,
-      fontSize: 22,
-    ),
-  );
-  return ThemeData(
+ThemeData stcTheme({Locale? locale}) {
+  final isAr = (locale?.languageCode ?? 'ar') != 'en';
+  final base = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
-    fontFamily: 'Segoe UI',
     scaffoldBackgroundColor: Colors.white,
     colorScheme: const ColorScheme.light(
       primary: StcColors.purple,
@@ -67,19 +60,32 @@ ThemeData stcTheme() {
       onSecondary: Colors.white,
       onSurface: StcColors.onyx,
     ),
-    textTheme: text,
-    appBarTheme: const AppBarTheme(
+  );
+  final textTheme = (isAr
+          ? GoogleFonts.cairoTextTheme(base.textTheme)
+          : GoogleFonts.interTextTheme(base.textTheme))
+      .apply(bodyColor: StcColors.onyx, displayColor: StcColors.onyx);
+  return base.copyWith(
+    textTheme: textTheme.copyWith(
+      bodyMedium: textTheme.bodyMedium?.copyWith(height: 1.45),
+      titleLarge: textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 22,
+      ),
+    ),
+    primaryTextTheme: textTheme,
+    appBarTheme: AppBarTheme(
       backgroundColor: StcColors.canvas,
       foregroundColor: StcColors.onyx,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: TextStyle(
+      titleTextStyle: textTheme.titleLarge?.copyWith(
         color: StcColors.onyx,
         fontSize: 22,
         fontWeight: FontWeight.w700,
       ),
-      iconTheme: IconThemeData(color: StcColors.onyx),
+      iconTheme: const IconThemeData(color: StcColors.onyx),
     ),
     cardTheme: CardThemeData(
       color: StcColors.card,
@@ -283,22 +289,25 @@ class StcIconTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(StcRadii.tile),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: StcColors.purple, size: 28),
-            const SizedBox(height: 10),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: StcColors.onyx,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                height: 1.25,
+            Icon(icon, color: StcColors.purple, size: 24),
+            const SizedBox(height: 6),
+            Flexible(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: StcColors.onyx,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.15,
+                ),
               ),
             ),
           ],

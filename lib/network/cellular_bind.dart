@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import '../app_store.dart';
+import '../l10n/app_localizations.dart';
 
 class CellularBind {
   static const _channel = MethodChannel('smartcare/cellular');
@@ -13,7 +15,7 @@ class CellularBind {
     } on PlatformException catch (e) {
       throw NetworkBindFailure(
         e.message ??
-            'بيانات الجوال غير متاحة. فعّل شبكة الجوال ثم أعد المحاولة',
+            AppLocalizations(appStore.locale).cellularDataUnavailable,
       );
     } on MissingPluginException {
       return false;

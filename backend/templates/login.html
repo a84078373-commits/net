@@ -1,54 +1,134 @@
 {% extends "base.html" %}
-{% block title %}{% if mode == 'register' %}إنشاء حساب{% else %}تسجيل الدخول{% endif %}{% endblock %}
+{% block title %}{% if mode == 'register' %}{{ _('إنشاء حساب') }}{% else %}{{ _('تسجيل الدخول') }}{% endif %}{% endblock %}
 {% block content %}
-<section class="panel auth-card" aria-labelledby="login-title">
-  <h1 id="login-title">{% if mode == 'register' %}إنشاء حساب{% else %}تسجيل الدخول{% endif %}</h1>
-  <p class="muted">
-    {% if mode == 'register' %}
-      الحساب يُحفظ في قاعدة بيانات الخادم. بعد الإنشاء استخدم الرقم وكلمة المرور فقط للدخول.
-    {% else %}
-      الدخول برقم الجوال وكلمة المرور فقط — بدون اسم. تبقى الجلسة حتى تسجيل الخروج.
-    {% endif %}
-  </p>
-  {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
-  <form method="post" class="stack" id="authForm" novalidate>
-    <div id="registerFields" {% if mode != 'register' %}hidden{% endif %}>
-      <label for="first_name">الاسم الأول
-        <input id="first_name" name="first_name" maxlength="40" autocomplete="given-name" value="{{ request.form.get('first_name','') if request.method=='POST' else '' }}">
+<div class="stc-wrap" dir="ltr">
+  <div class="stc-stage" id="stcStage">
+    <main class="stc-card{% if mode != 'register' %} login{% endif %}" id="stcCard" aria-labelledby="login-title">
+      <form method="post" id="authForm" novalidate dir="rtl">
+        <div class="stc-box f-reg">
+          <h1 id="regTitle">{{ _('إنشاء حساب') }}</h1>
+          <div id="regAlert"></div>
+          <div id="registerFields" {% if mode != 'register' %}hidden{% endif %}>
+            <label class="stc-field">
+              <input id="first_name" name="first_name" maxlength="40" autocomplete="given-name" placeholder="{{ _('الاسم الأول') }}" value="{{ request.form.get('first_name','') if request.method=='POST' else '' }}">
+              <svg class="stc-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4.5" fill="currentColor"/><path d="M3.5 21c0-4.6 3.8-7 8.5-7s8.5 2.4 8.5 7z" fill="currentColor"/></svg>
+            </label>
+            <label class="stc-field">
+              <input id="second_name" name="second_name" maxlength="40" autocomplete="additional-name" placeholder="{{ _('الاسم الثاني') }}" value="{{ request.form.get('second_name','') if request.method=='POST' else '' }}">
+              <svg class="stc-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4.5" fill="currentColor"/><path d="M3.5 21c0-4.6 3.8-7 8.5-7s8.5 2.4 8.5 7z" fill="currentColor"/></svg>
+            </label>
+            <label class="stc-field">
+              <input id="family_name" name="family_name" maxlength="40" autocomplete="family-name" placeholder="{{ _('اسم العائلة') }}" value="{{ request.form.get('family_name','') if request.method=='POST' else '' }}">
+              <svg class="stc-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4.5" fill="currentColor"/><path d="M3.5 21c0-4.6 3.8-7 8.5-7s8.5 2.4 8.5 7z" fill="currentColor"/></svg>
+            </label>
+          </div>
+          <div id="registerTail"></div>
+          <button name="mode" value="register" type="submit" class="stc-btn" id="btnRegister" {% if mode != 'register' %}hidden{% endif %}>{{ _('إنشاء حساب') }}</button>
+          <div id="regOtp"></div>
+        </div>
+
+        <div class="stc-box f-log">
+          <h1 id="login-title">{% if mode == 'reset' %}{{ _('نسيت كلمة المرور') }}{% else %}{{ _('تسجيل الدخول') }}{% endif %}</h1>
+          <p id="authLead" class="stc-sr">{{ _('أدخل رقمك وكلمة المرور') }}</p>
+          <div id="logAlert">
+            {% if error %}<div class="alert" id="authError" role="alert">{{ error }}</div>{% endif %}
+            <div id="waBanner" class="alert" hidden role="status"></div>
+          </div>
+          <div id="loginFields">
+            <div class="phone-field" id="countryBlock">
+              <label class="field-label" id="countryLabel" for="phone">{{ _('رقم الجوال') }}</label>
+              <div class="dial-anchor">
+                <div class="phone-with-dial" dir="ltr">
+                  <button type="button" class="dial-badge" id="countryCurrent" aria-haspopup="listbox" aria-expanded="false" aria-controls="countryPop">
+                    {% for c in countries if c.iso == selected_country %}
+                    <span class="country-flag" id="countryCurrentFlag" aria-hidden="true">{{ c.flag }}</span>
+                    <span id="dialBadge">+{{ c.dial }}</span>
+                    {% endfor %}
+                    <span class="dial-caret" aria-hidden="true"></span>
+                  </button>
+                  <input id="phone" name="phone" required inputmode="tel" autocomplete="username" placeholder="05xxxxxxxx" value="{{ request.form.get('phone','') if request.method=='POST' else '' }}">
+                </div>
+                <div class="country-pop" id="countryPop" hidden>
+                  <input type="search" class="country-search" id="countrySearch" placeholder="{{ _('ابحث عن الدولة') }}" autocomplete="off">
+                  <ul class="country-list" id="countryList" role="listbox" aria-labelledby="countryLabel">
+                    {% for c in countries %}
+                    <li>
+                      <button type="button" class="country-item{% if c.iso == selected_country %} is-selected{% endif %}" role="option" aria-selected="{{ 'true' if c.iso == selected_country else 'false' }}" data-iso="{{ c.iso }}" data-dial="{{ c.dial }}" data-example="{{ c.example }}" data-prefix="{{ c.local_prefix }}" data-name="{{ c.name }}">
+                        <span class="country-dial">+{{ c.dial }}</span>
+                        <span class="country-flag" aria-hidden="true">{{ c.flag }}</span>
+                        <span class="country-name">{{ c.name }}</span>
+                      </button>
+                    </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              </div>
+              <select id="country_code" name="country_code" required class="country-native" tabindex="-1" aria-hidden="true">
+                {% for c in countries %}
+                <option value="{{ c.iso }}" data-dial="{{ c.dial }}" data-example="{{ c.example }}" data-prefix="{{ c.local_prefix }}" {% if c.iso == selected_country %}selected{% endif %}>{{ c.flag }} {{ c.name }} (+{{ c.dial }})</option>
+                {% endfor %}
+              </select>
+              <span class="muted phone-hint" id="phoneHint">{{ _('اضغط الرمز لفتح قائمة الدول، ثم اكتب الرقم المحلي.') }}</span>
+            </div>
+            <label class="stc-field" id="passwordLabel">
+              <input id="password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="current-password" placeholder="{{ _('كلمة المرور') }}">
+              <button type="button" class="stc-eye" id="pwEye" aria-label="{{ _('إظهار') }}">
+                <svg class="stc-ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5C6.5 5 2.5 9.2 1.5 12c1 2.8 5 7 10.5 7s9.5-4.2 10.5-7C21.5 9.2 17.5 5 12 5zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>
+              </button>
+              <svg class="stc-ic stc-lock" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6.5 10V7.5a5.5 5.5 0 0 1 11 0V10h.5a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zm2.5 0h6V7.5a3 3 0 0 0-6 0z"/></svg>
+              <span id="passwordCaption" class="stc-sr">{{ _('كلمة المرور') }}</span>
+            </label>
+            <div class="stc-pw" id="pwRules" hidden aria-live="polite">
+              <div class="stc-pw-bar"><i id="pwBar"></i></div>
+              <ul class="stc-pw-rules">
+                <li data-r="len">{{ _('8 أحرف على الأقل') }}</li>
+                <li data-r="up">{{ _('حرف كبير واحد') }}</li>
+                <li data-r="num">{{ _('رقم واحد') }}</li>
+                <li data-r="sym">{{ _('رمز واحد') }}</li>
+              </ul>
+            </div>
+          </div>
+          <button type="button" class="stc-forgot" id="btnForgot" {% if mode != 'login' %}hidden{% endif %}>{{ _('نسيت كلمة المرور') }}</button>
+          <button name="mode" value="login" type="submit" class="stc-btn" id="btnLogin" {% if mode != 'login' %}hidden{% endif %}>{{ _('دخول') }}</button>
+          <button type="button" class="stc-btn" id="btnOpenOtp" hidden>{{ _('إرسال رمز واتساب') }}</button>
+          <div id="logOtp"></div>
+        </div>
+      </form>
+
+      <aside class="stc-overlay">
+        <a class="stc-lang" href="{{ lang_switch_url }}">{{ other_lang_label }}</a>
+        <div class="stc-ov o-reg" id="ovReg" {% if mode != 'register' %}inert{% endif %}>
+          <img class="stc-logo-img" src="{{ url_for('static', filename='img/stc-logo-auth.png') }}" alt="stc" width="150" height="48" decoding="async">
+          <h2 id="helloTitleReg">{{ _('سعيدون بعودتك') }}</h2>
+          <p class="sub" id="helloLeadReg">{{ _('لديك حساب بالفعل؟') }}</p>
+          <button type="button" class="stc-ghost" id="toggleToLogin">{{ _('تسجيل الدخول') }}</button>
+        </div>
+        <div class="stc-ov o-log" id="ovLog" {% if mode == 'register' %}inert{% endif %}>
+          <img class="stc-logo-img" src="{{ url_for('static', filename='img/stc-logo-auth.png') }}" alt="stc" width="150" height="48" decoding="async">
+          <h2 id="helloTitle">{{ _('مرحباً بك') }}</h2>
+          <p class="sub" id="helloLead">{{ _('ليس لديك حساب؟') }}</p>
+          <button type="button" class="stc-ghost" id="toggleMode">{% if mode == 'login' %}{{ _('إنشاء حساب') }}{% else %}{{ _('تسجيل الدخول') }}{% endif %}</button>
+        </div>
+      </aside>
+    </main>
+  </div>
+  <p class="stc-rot">{{ _('أدِر الهاتف لعرض أوضح') }}</p>
+</div>
+<div class="otp-modal" id="otpModal" hidden>
+  <div class="otp-modal-card" role="dialog" aria-modal="true" aria-labelledby="waTitle" dir="rtl">
+    <button type="button" class="otp-close" id="otpClose" aria-label="{{ _('إغلاق') }}">×</button>
+    <div class="wa-otp-card" id="waOtpCard">
+      <h1 id="waTitle">{{ _('تحقق واتساب') }}</h1>
+      <p class="otp-sub" id="waHint">{{ _('سيُرسل رمز لمرة واحدة عبر واتساب. الدخول العادي لا يحتاج رمزًا.') }}</p>
+      <button type="button" class="stc-btn" id="btnSendWa">{{ _('إرسال رمز واتساب') }}</button>
+      <label class="stc-field" for="waCode">
+        <input id="waCode" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="123456" dir="ltr" autocomplete="one-time-code">
       </label>
-      <label for="second_name">الاسم الثاني
-        <input id="second_name" name="second_name" maxlength="40" autocomplete="additional-name" value="{{ request.form.get('second_name','') if request.method=='POST' else '' }}">
-      </label>
-      <label for="family_name">اسم العائلة
-        <input id="family_name" name="family_name" maxlength="40" autocomplete="family-name" value="{{ request.form.get('family_name','') if request.method=='POST' else '' }}">
-      </label>
-      <fieldset class="stack-tight" style="border:0;padding:0;margin:0">
-        <legend style="font-weight:700;margin-bottom:0.35rem">الجنس</legend>
-        <label class="row" style="gap:0.5rem;align-items:center;font-weight:600">
-          <input type="radio" name="gender" value="male" {% if request.form.get('gender')=='male' %}checked{% endif %}> ذكر
-        </label>
-        <label class="row" style="gap:0.5rem;align-items:center;font-weight:600">
-          <input type="radio" name="gender" value="female" {% if request.form.get('gender')=='female' %}checked{% endif %}> أنثى
-        </label>
-      </fieldset>
+      <button type="button" class="stc-btn" id="btnVerifyWa">{{ _('تأكيد الرمز والدخول') }}</button>
+      <p class="stc-msg" id="waStatus" role="status"></p>
     </div>
-    <label for="phone">رقم الجوال
-      <input id="phone" name="phone" required pattern="05[0-9]{8}" inputmode="numeric" autocomplete="username" placeholder="05xxxxxxxx" value="{{ request.form.get('phone','') if request.method=='POST' else '' }}">
-    </label>
-    <label for="password">كلمة المرور
-      <input id="password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="{{ 'new-password' if mode=='register' else 'current-password' }}">
-    </label>
-    <div class="row btn-row-split">
-      <button name="mode" value="login" type="submit" class="primary" id="btnLogin">دخول</button>
-      <button name="mode" value="register" type="submit" class="ghost" id="btnRegister">إنشاء حساب</button>
-    </div>
-  </form>
-  <p class="muted" style="margin-top:1rem">
-    <button type="button" class="ghost" id="toggleMode" style="width:100%">
-      {% if mode == 'register' %}لديك حساب؟ إظهار نموذج الدخول{% else %}مستخدم جديد؟ إظهار حقول إنشاء الحساب{% endif %}
-    </button>
-  </p>
-</section>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -58,23 +138,387 @@
   const toggle = document.getElementById('toggleMode');
   const btnLogin = document.getElementById('btnLogin');
   const btnRegister = document.getElementById('btnRegister');
-  let register = {{ 'true' if mode == 'register' else 'false' }};
+  const waCard = document.getElementById('waOtpCard');
+  const otpModal = document.getElementById('otpModal');
+  const btnOpenOtp = document.getElementById('btnOpenOtp');
+  const waBanner = document.getElementById('waBanner');
+  const waStatus = document.getElementById('waStatus');
+  const countrySel = document.getElementById('country_code');
+  const countryPop = document.getElementById('countryPop');
+  const countryList = document.getElementById('countryList');
+  const countrySearch = document.getElementById('countrySearch');
+  const countryCurrent = document.getElementById('countryCurrent');
+  const phoneInput = document.getElementById('phone');
+  const dialBadge = document.getElementById('dialBadge');
+  let mode = {{ mode|tojson }};
+  if (mode !== 'login' && mode !== 'register' && mode !== 'reset') mode = 'login';
+  let waAvailable = false;
+  let waReason = '';
+  const savedCountry = {{ selected_country|tojson }};
+
+  const form = document.getElementById('authForm');
+  const lead = document.getElementById('authLead');
+  const btnForgot = document.getElementById('btnForgot');
+  const helloTitle = document.getElementById('helloTitle');
+  const helloLead = document.getElementById('helloLead');
+  const ovReg = document.getElementById('ovReg');
+  const ovLog = document.getElementById('ovLog');
+  const card = document.getElementById('stcCard');
+  const stage = document.getElementById('stcStage');
+
+  function fitCard() {
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    const port = matchMedia('(orientation:portrait) and (max-width:760px)').matches;
+    const cardH = card.classList.contains('login') ? (card.classList.contains('reset') ? 560 : 500) : 640;
+    card.style.height = cardH + 'px';
+    const s = Math.min(1.15, (innerWidth - 32) / 760, (innerHeight - (port ? 80 : 32)) / cardH);
+    card.style.transform = 'scale(' + s + ')';
+    stage.style.width = (760 * s) + 'px';
+    stage.style.height = (cardH * s) + 'px';
+  }
 
   function sync() {
+    const register = mode === 'register';
+    const reset = mode === 'reset';
     fields.hidden = !register;
-    title.textContent = register ? 'إنشاء حساب' : 'تسجيل الدخول';
-    toggle.textContent = register
-      ? 'لديك حساب؟ إظهار نموذج الدخول'
-      : 'مستخدم جديد؟ إظهار حقول إنشاء الحساب';
-    btnLogin.className = register ? 'ghost' : 'primary';
-    btnRegister.className = register ? 'primary' : 'ghost';
+    card.classList.toggle('login', !register);
+    card.classList.toggle('reset', reset);
+    ovReg.inert = !register;
+    ovLog.inert = register;
+    const host = register ? document.getElementById('registerTail') : document.getElementById('loginFields');
+    host.appendChild(document.getElementById('countryBlock'));
+    host.appendChild(document.getElementById('passwordLabel'));
+    host.appendChild(document.getElementById('pwRules'));
+    otpModal.hidden = true;
+    const alertHost = register ? document.getElementById('regAlert') : document.getElementById('logAlert');
+    alertHost.appendChild(waBanner);
+    const authError = document.getElementById('authError');
+    if (authError) alertHost.appendChild(authError);
+    title.textContent = register ? T('إنشاء حساب') : reset ? T('نسيت كلمة المرور') : T('تسجيل الدخول');
+    helloTitle.textContent = reset ? T('مرحباً بك') : T('مرحباً بك');
+    helloLead.textContent = reset ? T('ليس لديك حساب؟') : T('ليس لديك حساب؟');
+    lead.textContent = register
+      ? T('اختر الدولة والرقم، ثم اطلب رمز واتساب لإكمال إنشاء الحساب.')
+      : reset
+        ? T('أدخل الرقم وكلمة المرور الجديدة، ثم أكّد برمز واتساب.')
+        : T('أدخل رقمك وكلمة المرور');
+    toggle.textContent = T('إنشاء حساب');
+    btnLogin.hidden = mode !== 'login';
+    btnRegister.hidden = !register;
+    btnOpenOtp.hidden = !(reset && waAvailable);
+    btnForgot.hidden = mode !== 'login';
+    const passwordCaption = reset ? T('كلمة المرور الجديدة') : T('كلمة المرور');
+    document.getElementById('passwordCaption').textContent = passwordCaption;
+    const pwInput = document.getElementById('password');
+    pwInput.placeholder = passwordCaption;
+    pwInput.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+    pwInput.minLength = (register || reset) ? 8 : 6;
+    document.getElementById('pwRules').hidden = !(register || reset);
+    updatePwRules();
     ['first_name','second_name','family_name'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.required = register;
     });
+    waCard.hidden = false;
+    waBanner.hidden = mode === 'login' || waAvailable;
+    if (!waBanner.hidden && waReason) waBanner.textContent = waReason;
+    setCountryPop(false);
+    document.getElementById('waTitle').textContent = reset ? T('استعادة كلمة المرور') : T('رمز إنشاء الحساب');
+    document.getElementById('waHint').textContent = reset
+      ? T('يصل الرمز فقط إذا كان الرقم مسجّلًا.')
+      : T('بعد وصول الرمز على واتساب أدخله هنا لإنشاء الحساب.');
+    document.getElementById('btnVerifyWa').textContent = reset
+      ? T('تأكيد الرمز وتغيير كلمة المرور')
+      : T('تأكيد الرمز وإنشاء الحساب');
+    fitCard();
   }
-  toggle.addEventListener('click', () => { register = !register; sync(); });
+  function goLogin() {
+    mode = 'login';
+    sync();
+  }
+  function goRegister() {
+    mode = 'register';
+    sync();
+  }
+  toggle.addEventListener('click', () => {
+    if (mode === 'login') goRegister();
+    else goLogin();
+  });
+  document.getElementById('toggleToLogin').addEventListener('click', goLogin);
+  btnForgot.addEventListener('click', () => {
+    mode = 'reset';
+    sync();
+  });
+  addEventListener('resize', fitCard);
+  const pwRules = {
+    len: (v) => v.length >= 8,
+    up: (v) => /[A-Z]/.test(v),
+    num: (v) => /\d/.test(v),
+    sym: (v) => /[^A-Za-z0-9]/.test(v),
+  };
+  function passwordStrong(v) {
+    return Object.values(pwRules).every((fn) => fn(v || ''));
+  }
+  function updatePwRules() {
+    const box = document.getElementById('pwRules');
+    if (box.hidden) return true;
+    const v = document.getElementById('password').value || '';
+    let n = 0;
+    box.querySelectorAll('li').forEach((li) => {
+      const ok = pwRules[li.dataset.r](v);
+      li.classList.toggle('ok', ok);
+      if (ok) n += 1;
+    });
+    const bar = document.getElementById('pwBar');
+    bar.style.width = (n * 25) + '%';
+    bar.style.background = n <= 1 ? '#d02348' : n === 2 ? '#e8a317' : '#0a7d52';
+    return n === 4;
+  }
+  function openOtp() {
+    if (!form.reportValidity()) return;
+    if ((mode === 'register' || mode === 'reset') && !passwordStrong(document.getElementById('password').value)) {
+      updatePwRules();
+      document.getElementById('password').focus();
+      return;
+    }
+    otpModal.hidden = false;
+    document.getElementById('waCode').value = '';
+    document.getElementById('waCode').focus();
+    document.getElementById('btnSendWa').click();
+  }
+  form.addEventListener('submit', (e) => {
+    if (mode === 'register' || mode === 'reset') {
+      if (!passwordStrong(document.getElementById('password').value)) {
+        e.preventDefault();
+        updatePwRules();
+        document.getElementById('password').focus();
+        return;
+      }
+    }
+    if (mode === 'reset' || (mode === 'register' && waAvailable)) {
+      e.preventDefault();
+      if (mode === 'register' && waAvailable) openOtp();
+    }
+  });
+  btnOpenOtp.addEventListener('click', openOtp);
+  document.getElementById('otpClose').addEventListener('click', () => { otpModal.hidden = true; });
+  otpModal.addEventListener('click', (e) => {
+    if (e.target === otpModal) otpModal.hidden = true;
+  });
+  document.getElementById('pwEye').addEventListener('click', () => {
+    const input = document.getElementById('password');
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+  document.getElementById('password').addEventListener('input', updatePwRules);
   sync();
+
+  function selectedCountry() {
+    const opt = countrySel.options[countrySel.selectedIndex];
+    return {
+      iso: countrySel.value || 'SA',
+      dial: (opt && opt.dataset.dial) || '966',
+      example: (opt && opt.dataset.example) || '05xxxxxxxx',
+      prefix: (opt && opt.dataset.prefix) || '',
+    };
+  }
+
+  function syncCountryUi() {
+    const c = selectedCountry();
+    dialBadge.textContent = '+' + c.dial;
+    const example = c.iso === 'SA' && c.prefix === '0'
+      ? '05' + (c.example.replace(/^5/, '') || 'xxxxxxxx')
+      : (c.prefix ? c.prefix : '') + c.example;
+    phoneInput.placeholder = example || c.example;
+    const picked = countryList.querySelector('.country-item.is-selected');
+    const flagEl = document.getElementById('countryCurrentFlag');
+    if (flagEl) {
+      const flag = picked ? picked.querySelector('.country-flag') : null;
+      flagEl.textContent = flag ? flag.textContent : '';
+    }
+    countryCurrent.setAttribute('aria-label', ((picked && picked.dataset.name) || c.iso) + ' +' + c.dial);
+  }
+
+  function setCountryPop(open) {
+    countryPop.hidden = !open;
+    countryCurrent.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!open) return;
+    countrySearch.value = '';
+    countryList.querySelectorAll('li').forEach((li) => { li.hidden = false; });
+    countrySearch.focus();
+  }
+
+  function renderCountryList(list, prefer) {
+    countryList.innerHTML = '';
+    list.forEach((c) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'country-item' + (c.iso === prefer ? ' is-selected' : '');
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-selected', c.iso === prefer ? 'true' : 'false');
+      btn.dataset.iso = c.iso;
+      btn.dataset.dial = c.dial || '';
+      btn.dataset.example = c.example || '';
+      btn.dataset.prefix = c.local_prefix || '';
+      btn.dataset.name = c.name || c.iso;
+      const dial = document.createElement('span');
+      dial.className = 'country-dial';
+      dial.textContent = '+' + (c.dial || '');
+      const flag = document.createElement('span');
+      flag.className = 'country-flag';
+      flag.setAttribute('aria-hidden', 'true');
+      flag.textContent = c.flag || '';
+      const name = document.createElement('span');
+      name.className = 'country-name';
+      name.textContent = c.name || c.iso;
+      btn.append(dial, flag, name);
+      li.appendChild(btn);
+      countryList.appendChild(li);
+    });
+  }
+
+  function fillCountries(list, defaultIso) {
+    if (!Array.isArray(list) || !list.length) return;
+    const prefer = countrySel.value || savedCountry || defaultIso || 'SA';
+    countrySel.innerHTML = '';
+    list.forEach((c) => {
+      const opt = document.createElement('option');
+      opt.value = c.iso;
+      opt.dataset.dial = c.dial || '';
+      opt.dataset.example = c.example || '';
+      opt.dataset.prefix = c.local_prefix || '';
+      opt.textContent = (c.flag || '') + ' ' + (c.name || c.iso) + ' (+' + c.dial + ')';
+      if (c.iso === prefer) opt.selected = true;
+      countrySel.appendChild(opt);
+    });
+    if (![...countrySel.options].some((o) => o.value === prefer) && countrySel.options.length) {
+      countrySel.selectedIndex = 0;
+    }
+    renderCountryList(list, countrySel.value || prefer);
+    syncCountryUi();
+  }
+
+  countryList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.country-item');
+    if (!btn) return;
+    countrySel.value = btn.dataset.iso;
+    countryList.querySelectorAll('.country-item').forEach((el) => {
+      const on = el === btn;
+      el.classList.toggle('is-selected', on);
+      el.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    syncCountryUi();
+    setCountryPop(false);
+    phoneInput.focus();
+  });
+
+  countrySearch.addEventListener('input', () => {
+    const q = countrySearch.value.trim().toLowerCase();
+    countryList.querySelectorAll('.country-item').forEach((btn) => {
+      const blob = ((btn.dataset.name || '') + ' ' + (btn.dataset.iso || '') + ' ' + (btn.dataset.dial || '')).toLowerCase();
+      btn.parentElement.hidden = !!q && !blob.includes(q);
+    });
+  });
+
+  countryCurrent.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCountryPop(countryPop.hidden);
+  });
+  document.addEventListener('click', (e) => {
+    if (countryPop.hidden) return;
+    if (countryPop.contains(e.target) || countryCurrent.contains(e.target)) return;
+    setCountryPop(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!otpModal.hidden) { otpModal.hidden = true; return; }
+    setCountryPop(false);
+  });
+
+  countrySel.addEventListener('change', syncCountryUi);
+  syncCountryUi();
+
+  async function apiJson(path, body) {
+    const res = await fetch(path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || T('فشل الطلب'));
+    return data;
+  }
+
+  function phonePayload() {
+    return {
+      phone: phoneInput.value.trim(),
+      country_code: countrySel.value || 'SA',
+    };
+  }
+
+  fetch('/api/auth/whatsapp/status')
+    .then((r) => r.json())
+    .then((s) => {
+      waAvailable = !!s.available;
+      waReason = s.reason || T('تحقق واتساب غير مفعّل حتى يضبط المدير GREEN API.');
+      sync(false);
+      if (s.countries) fillCountries(s.countries, s.default_country || 'SA');
+      if (!waAvailable) {
+        if (!s.countries) {
+          fetch('/api/auth/countries').then((r) => r.json()).then((d) => {
+            fillCountries(d.countries || [], d.default_country || 'SA');
+          }).catch(() => {});
+        }
+      }
+    })
+    .catch(() => {
+      waCard.hidden = true;
+      fetch('/api/auth/countries').then((r) => r.json()).then((d) => {
+        fillCountries(d.countries || [], d.default_country || 'SA');
+      }).catch(() => {});
+    });
+
+  document.getElementById('btnSendWa').onclick = async () => {
+    waStatus.textContent = T('جارٍ إرسال الرمز…');
+    try {
+      const data = await apiJson('/api/auth/whatsapp/send-code', {
+        ...phonePayload(),
+        purpose: mode === 'reset' ? 'reset' : 'register',
+      });
+      waStatus.textContent = data.message || T('تم إرسال رمز التحقق عبر واتساب');
+    } catch (e) {
+      waStatus.textContent = e.message || String(e);
+    }
+  };
+
+  document.getElementById('btnVerifyWa').onclick = async () => {
+    const code = document.getElementById('waCode').value.trim();
+    const password = document.getElementById('password').value;
+    waStatus.textContent = T('جارٍ التحقق…');
+    try {
+      const body = {
+        ...phonePayload(),
+        code,
+        purpose: mode === 'reset' ? 'reset' : 'register',
+      };
+      if (mode !== 'login') {
+        body.password = password;
+      }
+      if (mode === 'register') {
+        body.password = password;
+        body.first_name = document.getElementById('first_name').value.trim();
+        body.second_name = document.getElementById('second_name').value.trim();
+        body.family_name = document.getElementById('family_name').value.trim();
+      }
+      await apiJson('/api/auth/whatsapp/verify', body);
+      waStatus.textContent = T('تم التحقق — جارٍ فتح لوحة التحكم…');
+      location.href = {{ url_for('home')|tojson }};
+    } catch (e) {
+      waStatus.textContent = e.message || String(e);
+    }
+  };
 })();
 </script>
 {% endblock %}

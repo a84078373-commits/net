@@ -3,8 +3,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../app_store.dart';
+import '../l10n/app_localizations.dart';
 
 final networkApi = NetworkApi();
+
+AppLocalizations get _l10n => AppLocalizations(appStore.locale);
 
 const _tokenKey = 'smartcare.auth.token';
 const _userKey = 'smartcare.auth.user';
@@ -58,9 +62,7 @@ class NetworkApi extends ChangeNotifier {
               '::1',
               '10.0.2.2',
             ].contains(root.host))) {
-      throw const NetworkFailure(
-        'عنوان الخدمة يحتاج HTTPS؛ HTTP مسموح فقط للتطوير على الجهاز نفسه',
-      );
+      throw NetworkFailure(_l10n.apiHttpsRequired);
     }
     return Uri.parse(
       '${baseUrl.replaceAll(RegExp(r'/$'), '')}$path',
@@ -147,21 +149,17 @@ class NetworkApi extends ChangeNotifier {
       if (response.statusCode >= 400) {
         throw NetworkFailure(
           json['detail'] is String
-              ? json['detail']
-              : 'رفض الخادم الطلب؛ تحقق من الحقول والاتصال',
+              ? json['detail'] as String
+              : _l10n.apiRequestRejected,
         );
       }
       return json;
     } on NetworkFailure {
       rethrow;
     } on TimeoutException {
-      throw const NetworkFailure(
-        'انتهت مهلة الخدمة؛ خادم Render قد يكون في إقلاع أول، أعد المحاولة خلال ثوانٍ',
-      );
+      throw NetworkFailure(_l10n.apiTimeout);
     } catch (_) {
-      throw const NetworkFailure(
-        'تعذر الاتصال بخدمة الشبكة. تحقق من اتصالك وإعداد عنوان API',
-      );
+      throw NetworkFailure(_l10n.apiConnectionFailed);
     }
   }
 

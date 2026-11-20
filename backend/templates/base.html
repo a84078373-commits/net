@@ -1,55 +1,127 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ lang }}" dir="{{ text_dir }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#4f008c">
-  <meta name="description" content="SmartCare حائل — قياس سرعة الشبكة وخريطة جودة التغطية">
-  <title>{% block title %}SmartCare حائل{% endblock %}</title>
+  <meta name="theme-color" content="#2A1061">
+  <meta name="description" content="{{ _('SmartCare حائل — قياس سرعة الشبكة وخريطة جودة التغطية') }}">
+  <title>{% block title %}{{ _('SmartCare حائل') }}{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/stc-logo.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/stc-logo.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <script>
+    window.LANG = {{ lang|tojson }};
+    window.I18N = {{ js_strings|tojson }};
+    window.T = function (text, params) {
+      var out = window.I18N[text] || text;
+      if (params) {
+        Object.keys(params).forEach(function (k) { out = out.split('{' + k + '}').join(params[k]); });
+      }
+      return out;
+    };
+  </script>
   {% block head %}{% endblock %}
 </head>
-<body>
-  <a class="skip-link" href="#main">تخطي إلى المحتوى</a>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" href="{{ url_for('home') }}">stc <span>SmartCare</span></a>
+<body class="app-body{% if bare_layout %} bare-layout{% endif %}{% if auth_layout %} auth-layout{% endif %}">
+  <a class="skip-link" href="#main">{{ _('تخطي إلى المحتوى') }}</a>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
+
+  <aside class="sidebar" id="siteNav" aria-label="{{ _('التنقل الرئيسي') }}">
+    <div class="sidebar-brand">
+      <a class="brand" href="{{ url_for('home') }}">
+        <span class="brand-mark">
+          <img src="{{ url_for('static', filename='img/stc-logo.png') }}" alt="stc" width="72" height="36" decoding="async">
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">SmartCare</span>
+          <span class="brand-sub">AI</span>
+        </span>
+      </a>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('home') }}" data-nav="/">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z" fill="currentColor"/></svg>
+        <span>{{ _('الرئيسية') }}</span>
+      </a>
+      <a href="{{ url_for('web_status') }}" data-nav="/status">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm1 15h-2v-2h2Zm0-4h-2V7h2Z" fill="currentColor"/></svg>
+        <span>{{ _('حالة شبكتي') }}</span>
+      </a>
+      <a href="{{ url_for('web_map') }}" data-nav="/map">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3.4 3 5.6v14.8l6.5-2.2 5 2.2 6.5-2.2V3.4L14.5 5.6l-5-2.2Zm1 2.2 3 1.3v12.1l-3-1.3V5.6Zm-2 .3v12.1L4.5 19V7.1l4-1.3Zm10 1.3v11.8l-4 1.4V8.4l4-1.2Z" fill="currentColor"/></svg>
+        <span>{{ _('تحليل الشبكة') }}</span>
+      </a>
+      <a href="{{ url_for('web_radar') }}" data-nav="/radar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8V2Zm0 5a5 5 0 1 0 5 5h-2a3 3 0 1 1-3-3V7Zm-.5 4.5 4.6 4.6-1.4 1.4-4.6-4.6 1.4-1.4Z" fill="currentColor"/></svg>
+        <span>{{ _('رادار الأعطال') }}</span>
+      </a>
+      {% if is_admin %}
+      <a href="{{ url_for('web_twin') }}" data-nav="/twin">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 2.5 3.5-2 3.5 2V20h-7v-4.5Z" fill="currentColor"/></svg>
+        <span>{{ _('التوأم الرقمي') }}</span>
+      </a>
+      <a href="{{ url_for('web_admin') }}" data-nav="/admin">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.1 12.9a7.3 7.3 0 0 0 .1-1l2-1.5-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L14.8 4h-4l-.3 2.9a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a7.3 7.3 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.3 2.9h4l.3-2.9a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z" fill="currentColor"/></svg>
+        <span>{{ _('الإعدادات') }}</span>
+      </a>
+      {% endif %}
+      <a href="{{ url_for('web_help') }}" data-nav="/help">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 15.2a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm1.5-4.7c-.7.4-1 .7-1 1.5h-2c0-1.5.7-2.3 1.7-2.8.7-.4 1-0.7 1-1.3 0-.8-.6-1.3-1.5-1.3s-1.5.5-1.6 1.4H8c.1-2 1.6-3.3 3.7-3.3 2.1 0 3.6 1.2 3.6 3.1 0 1.1-.5 1.9-1.8 2.7Z" fill="currentColor"/></svg>
+        <span>{{ _('المساعدة') }}</span>
+      </a>
+    </nav>
+    <div class="sidebar-foot">
+      <p>STC SmartCare AI v1.0.0</p>
+      <p class="muted-lite">{{ _('قياس فعلي عبر الخادم') }}</p>
+    </div>
+  </aside>
+
+  <div class="app-frame">
+    <header class="app-header">
       <button
         type="button"
         class="nav-toggle"
         id="navToggle"
         aria-controls="siteNav"
         aria-expanded="false"
-        aria-label="فتح القائمة"
+        aria-label="{{ _('فتح القائمة') }}"
       >
         <span class="nav-toggle-bars" aria-hidden="true"><i></i><i></i><i></i></span>
       </button>
-      <nav class="nav" id="siteNav" aria-label="التنقل الرئيسي">
-        <a href="{{ url_for('home') }}">الرئيسية</a>
-        <a href="{{ url_for('web_speed') }}">فحص السرعة</a>
-        <a href="{{ url_for('web_map') }}">الخريطة</a>
-        <a href="{{ url_for('web_ai') }}">الذكاء</a>
-        {% if is_admin %}
-          <a href="{{ url_for('web_admin') }}">لوحة المدير</a>
-        {% endif %}
+      <div class="header-title">
+        <div class="header-brand-row">
+          <img class="header-logo" src="{{ url_for('static', filename='img/stc-logo.png') }}" alt="stc" width="56" height="28" decoding="async">
+          <strong>SmartCare AI</strong>
+        </div>
+        <span>{{ _('منصة التحليل الذكي وجودة الشبكة') }}</span>
+      </div>
+      <div class="header-actions">
+        <a class="lang-switch" href="{{ lang_switch_url }}" lang="{{ other_lang }}" hreflang="{{ other_lang }}">{{ other_lang_label }}</a>
         {% if current_user %}
-          <form class="inline" method="post" action="{{ url_for('web_logout') }}">
-            <button type="submit" class="linkish">خروج</button>
-          </form>
+          <div class="user-chip">
+            <span class="user-avatar" aria-hidden="true">{{ (current_user.name or 'U')[:1] }}</span>
+            <div>
+              <strong>{{ _('مرحباً،') }} {{ current_user.name }}</strong>
+              <small>{{ current_user.phone }}</small>
+            </div>
+            <form method="post" action="{{ url_for('web_logout') }}">
+              <button type="submit" class="ghost-link">{{ _('خروج') }}</button>
+            </form>
+          </div>
         {% else %}
-          <a class="cta" href="{{ url_for('web_login') }}">دخول</a>
+          <a class="cta" href="{{ url_for('web_login') }}">{{ _('دخول') }}</a>
         {% endif %}
-      </nav>
-    </div>
-  </header>
+      </div>
+    </header>
 
-  <main class="wrap" id="main">
-    {% block content %}{% endblock %}
-  </main>
+    <main class="app-main" id="main">
+      {% block content %}{% endblock %}
+    </main>
 
-  <footer class="foot">
-    SmartCare حائل • قياس فعلي عبر الخادم • ليس تطبيق stc الرسمي
-  </footer>
+    <footer class="app-foot">
+      {{ _('SmartCare حائل • قياس فعلي عبر الخادم • ليس تطبيق stc الرسمي') }}
+    </footer>
+  </div>
 
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
   {% block scripts %}{% endblock %}

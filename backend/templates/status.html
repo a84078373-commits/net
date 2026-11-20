@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+{% block title %}{{ _('حالة شبكتي') }}{% endblock %}
+{% block content %}
+<section class="panel status-panel" aria-labelledby="status-title">
+  <div class="status-hero">
+    <p class="eyebrow">{{ _('للعميل') }}</p>
+    <h1 id="status-title">{{ _('حالة شبكتي') }}</h1>
+    <p class="muted">{{ _('فحص الموقع، قياس السرعة، وتحليل ذكي في مكان واحد: هل المشكلة من الشبكة أم من جهازك؟') }}</p>
+    <div class="status-jump row" style="margin-top:1rem">
+      <a class="ghost" href="#speedSection">{{ _('فحص السرعة') }}</a>
+      <a class="ghost" href="#aiSection">{{ _('الذكاء الاصطناعي') }}</a>
+    </div>
+  </div>
+
+  <div class="card status-block" id="networkSection">
+    <h2 class="section-title">{{ _('تشخيص موقعي') }}</h2>
+    <p class="muted">{{ _('خلال ثوانٍ: هل المشكلة من الشبكة أم من جهازك؟ مع حالة العمل وخطوات التشخيص.') }}</p>
+    <div class="row" style="margin-top:1rem">
+      <button type="button" class="primary" id="btnCheckStatus">{{ _('فحص موقعي الآن') }}</button>
+    </div>
+    <p id="statusLine" class="muted status-line" role="status">{{ _('جاهز') }}</p>
+
+    <div class="status-result" id="statusResult" hidden>
+      <div class="status-verdict" id="verdictBadge">—</div>
+      <h3 id="verdictHeadline"></h3>
+      <p class="muted" id="verdictDetail"></p>
+      <div class="status-meta" id="statusMeta"></div>
+      <div class="status-work" id="statusWork" hidden>
+        <strong>{{ _('حالة العمل') }}</strong>
+        <p id="workStatusText"></p>
+      </div>
+      <div class="status-actions row">
+        <button type="button" class="primary" id="btnSubscribe" hidden>{{ _('اشترك بتنبيه هذا الحي') }}</button>
+        <button type="button" class="ghost" id="btnUnsubscribe" hidden>{{ _('إلغاء الاشتراك') }}</button>
+        <a class="ghost" href="{{ url_for('web_map') }}?focus=radar">{{ _('عرض الرادار') }}</a>
+      </div>
+      <p id="subStatus" class="muted" role="status"></p>
+      <div class="status-steps">
+        <h3>{{ _('خطوات التشخيص') }}</h3>
+        <ol id="diagList"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="card status-block" id="speedSection">
+    <h2 class="section-title">{{ _('فحص السرعة') }}</h2>
+    <p class="muted">{{ _('قياس حقيقي عبر الخادم — بعد الانتهاء يُحفظ على الخريطة (إن سمحت بالموقع) ويُحلَّل بالذكاء الاصطناعي.') }}</p>
+    {% if not logged_in %}
+      <div class="alert" role="status">{{ _('سجّل الدخول لتشغيل فحص السرعة.') }}</div>
+      <a class="primary" href="{{ url_for('web_login', next=url_for('web_status') + '#speedSection') }}">{{ _('تسجيل الدخول') }}</a>
+    {% elif not speed_available %}
+      <div class="alert" role="alert">{{ _('اختبار الإنترنت غير متاح حاليًا على الخادم.') }}</div>
+    {% else %}
+      <label class="row" style="margin-top:1rem;font-weight:700;gap:0.55rem;align-items:center">
+        <input type="checkbox" id="shareLoc" checked style="width:1.15rem;height:1.15rem;min-height:auto">
+        {{ _('مشاركة الموقع لرسم القياس على الخريطة') }}
+      </label>
+      <div class="row" style="margin-top:1rem">
+        <button type="button" id="runSpeed" class="primary">{{ _('بدء الفحص') }}</button>
+        <a class="ghost" href="{{ url_for('web_map') }}">{{ _('فتح الخريطة') }}</a>
+      </div>
+      <p id="speedStatus" class="muted status-line" role="status" aria-live="polite">{{ _('جاهز') }}</p>
+      <div class="metrics" hidden id="metrics" aria-live="polite">
+        <div><span id="dl">—</span><small>{{ _('تحميل Mbps') }}</small></div>
+        <div><span id="ul">—</span><small>{{ _('رفع Mbps') }}</small></div>
+        <div><span id="pg">—</span><small>{{ _('بنق ms') }}</small></div>
+      </div>
+      <div id="saveInfo" class="muted" style="margin-top:0.75rem" hidden></div>
+      <div id="complaintBox" class="complaint-box" hidden>
+        <p>{{ _('النتيجة ضعيفة — يمكنك تبليغ رادار الأعطال لدعم الإنذار المبكر في حيّك.') }}</p>
+        <button type="button" id="btnComplaint" class="ghost">{{ _('بلّغ عن عطل / ضعف') }}</button>
+        <span id="complaintStatus" class="muted" role="status"></span>
+      </div>
+      <div id="speedAiBox" hidden style="margin-top:1rem">
+        <h3 class="section-title">{{ _('تحليل نتيجة الفحص') }}</h3>
+        <pre id="speedAiOut" class="box" aria-live="polite"></pre>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card status-block" id="aiSection">
+    <h2 class="section-title">{{ _('الذكاء الاصطناعي') }}</h2>
+    <p class="muted">{{ _('صف مشكلة الشبكة أو الصق ملخص قياس لتحليل وصفي عبر مفتاح Gemini على الخادم.') }}</p>
+    {% if not logged_in %}
+      <div class="alert" role="status">{{ _('سجّل الدخول لاستخدام التحليل الذكي.') }}</div>
+      <a class="primary" href="{{ url_for('web_login', next=url_for('web_status') + '#aiSection') }}">{{ _('تسجيل الدخول') }}</a>
+    {% elif not ai_available %}
+      <div class="alert" role="alert">{{ _('الخدمة غير مفعّلة بعد. يحتاج المدير حفظ مفتاح Gemini من لوحة الإدارة.') }}</div>
+    {% else %}
+      <p class="badge" role="status">{{ _('الذكاء الاصطناعي جاهز على الخادم') }}</p>
+      <form class="stack" id="aiForm" onsubmit="return false;">
+        <label for="aiText">{{ _('صف مشكلة الشبكة أو الصق ملخص قياس') }}
+          <textarea id="aiText" rows="5" placeholder="{{ _('مثال: التحميل ضعيف مساءً على 5G في حي النقرة') }}"></textarea>
+        </label>
+        <div class="row">
+          <button type="button" id="runAi" class="primary">{{ _('حلّل الآن') }}</button>
+        </div>
+      </form>
+      <div id="aiMsg" class="alert" hidden role="alert"></div>
+      <pre id="aiOut" class="box" aria-live="polite"></pre>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+const TOKEN = {{ token|tojson }};
+const LOGGED_IN = {{ logged_in|tojson }};
+const LIMITS = {{ limits|tojson }};
+const MIB = 1024 * 1024;
+const headers = TOKEN
+  ? {'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json'}
+  : {'Content-Type': 'application/json'};
+let lastStatus = null;
+
+const VERDICT_UI = {
+  network_issue: { label: T('مشكلة شبكة'), cls: 'bad' },
+  device_likely: { label: T('غالبًا الجهاز'), cls: 'warn' },
+  healthy: { label: T('الشبكة طبيعية'), cls: 'ok' },
+  unclear: { label: T('غير محسوم'), cls: 'flat' },
+};
+
+function getPosition(opts) {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      return resolve(opts && opts.detailed ? { error: 'unsupported' } : null);
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (opts && opts.detailed) {
+          resolve({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy || 50,
+          });
+        } else {
+          resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        }
+      },
+      (err) => {
+        if (opts && opts.detailed) {
+          const code = err && err.code;
+          resolve({ error: code === 1 ? 'denied' : code === 3 ? 'timeout' : 'unavailable' });
+        } else {
+          resolve(null);
+        }
+      },
+      { enableHighAccuracy: true, timeout: opts && opts.detailed ? 20000 : 18000, maximumAge: 0 }
+    );
+  });
+}
+
+async function runStatus(coords) {
+  const line = document.getElementById('statusLine');
+  line.textContent = T('جاري التحليل…');
+  let url = '/api/my-network-status';
+  if (coords) url += '?lat=' + encodeURIComponent(coords.lat) + '&lon=' + encodeURIComponent(coords.lon);
+  const res = await fetch(url, { headers });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || T('تعذر الفحص'));
+  lastStatus = data;
+  const ui = VERDICT_UI[data.verdict] || VERDICT_UI.unclear;
+  const box = document.getElementById('statusResult');
+  box.hidden = false;
+  const badge = document.getElementById('verdictBadge');
+  badge.textContent = ui.label;
+  badge.className = 'status-verdict ' + ui.cls;
+  document.getElementById('verdictHeadline').textContent = data.headline || '';
+  document.getElementById('verdictDetail').textContent = data.detail || '';
+  const loc = data.location || {};
+  const area = data.area || {};
+  document.getElementById('statusMeta').innerHTML =
+    `<span>${T('القطاع')}: <b>${loc.sector || '—'}</b></span>` +
+    `<span>${T('خلية')}: <b>${loc.cell_id || '—'}</b></span>` +
+    `<span>${T('عينات الحي')}: <b>${area.samples_7d ?? 0}</b></span>` +
+    (area.avg_download_mbps != null ? `<span>↓ <b>${area.avg_download_mbps}</b> Mbps</span>` : '') +
+    (area.avg_ping_ms != null ? `<span>ping <b>${area.avg_ping_ms}</b> ms</span>` : '');
+  const work = document.getElementById('statusWork');
+  if (data.work_status) {
+    work.hidden = false;
+    document.getElementById('workStatusText').textContent = data.work_status;
+  } else {
+    work.hidden = true;
+  }
+  document.getElementById('diagList').innerHTML = (data.diagnostics || []).map(s => `<li>${s}</li>`).join('');
+  const btnSub = document.getElementById('btnSubscribe');
+  const btnUn = document.getElementById('btnUnsubscribe');
+  document.getElementById('subStatus').textContent = '';
+  if (!LOGGED_IN) {
+    btnSub.hidden = false;
+    btnSub.textContent = T('سجّل الدخول للاشتراك بالتنبيه');
+    btnUn.hidden = true;
+  } else if (data.subscribed) {
+    btnSub.hidden = true;
+    btnUn.hidden = false;
+  } else {
+    btnSub.hidden = false;
+    btnSub.textContent = T('اشترك بتنبيه هذا الحي');
+    btnUn.hidden = true;
+  }
+  line.textContent = T('تم التحليل');
+}
+
+document.getElementById('btnCheckStatus').onclick = async () => {
+  const btn = document.getElementById('btnCheckStatus');
+  btn.disabled = true;
+  document.getElementById('statusLine').textContent = T('تحديد الموقع…');
+  try {
+    const coords = await getPosition();
+    await runStatus(coords);
+  } catch (e) {
+    document.getElementById('statusLine').textContent = e.message || String(e);
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+document.getElementById('btnSubscribe').onclick = async () => {
+  if (!LOGGED_IN) {
+    location.href = {{ url_for('web_login', next=url_for('web_status'))|tojson }};
+    return;
+  }
+  if (!lastStatus || !lastStatus.location) return;
+  const st = document.getElementById('subStatus');
+  st.textContent = T('جارٍ الاشتراك…');
+  try {
+    const res = await fetch('/api/alert-subscriptions', {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        cell_id: lastStatus.location.cell_id,
+        latitude: lastStatus.location.lat,
+        longitude: lastStatus.location.lon
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || T('تعذر الاشتراك'));
+    st.textContent = T('تم الاشتراك — سنُظهر تنبيهًا عند تدهور هذه الخلية.');
+    document.getElementById('btnSubscribe').hidden = true;
+    document.getElementById('btnUnsubscribe').hidden = false;
+  } catch (e) {
+    st.textContent = e.message || String(e);
+  }
+};
+
+document.getElementById('btnUnsubscribe').onclick = async () => {
+  if (!lastStatus || !lastStatus.location) return;
+  const st = document.getElementById('subStatus');
+  try {
+    const res = await fetch('/api/alert-subscriptions', {
+      method: 'DELETE', headers,
+      body: JSON.stringify({ cell_id: lastStatus.location.cell_id })
+    });
+    if (!res.ok && res.status !== 204) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || T('تعذر الإلغاء'));
+    }
+    st.textContent = T('تم إلغاء الاشتراك');
+    document.getElementById('btnSubscribe').hidden = false;
+    document.getElementById('btnSubscribe').textContent = T('اشترك بتنبيه هذا الحي');
+    document.getElementById('btnUnsubscribe').hidden = true;
+  } catch (e) {
+    st.textContent = e.message || String(e);
+  }
+};
+
+runStatus(null).catch(() => {});
+
+{% if logged_in and speed_available %}
+async function speedApi(path, opts = {}) {
+  const hdrs = Object.assign({'Authorization': 'Bearer ' + TOKEN}, opts.headers || {});
+  const res = await fetch(path, Object.assign({}, opts, {headers: hdrs}));
+  if (!res.ok) {
+    let detail = T('فشل الطلب');
+    try { detail = (await res.json()).detail || detail; } catch (_) {}
+    throw new Error(detail);
+  }
+  if (res.status === 204) return null;
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return res.json();
+  return res.arrayBuffer();
+}
+
+function locOk(loc) {
+  return loc && typeof loc.latitude === 'number' && typeof loc.longitude === 'number';
+}
+
+document.getElementById('runSpeed').onclick = async () => {
+  const btn = document.getElementById('runSpeed');
+  const status = document.getElementById('speedStatus');
+  const metrics = document.getElementById('metrics');
+  const saveInfo = document.getElementById('saveInfo');
+  const aiBox = document.getElementById('speedAiBox');
+  const aiOut = document.getElementById('speedAiOut');
+  const wantShare = document.getElementById('shareLoc').checked;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> ' + T('جارٍ الفحص…');
+  status.textContent = T('بدء الجلسة…');
+  saveInfo.hidden = true;
+  aiBox.hidden = true;
+  aiOut.textContent = '';
+  try {
+    let loc = null;
+    if (wantShare) {
+      status.textContent = T('تحديد الموقع للخريطة…');
+      loc = await getPosition({ detailed: true });
+      if (!locOk(loc)) {
+        const why = (loc && loc.error) || 'unavailable';
+        const tip = why === 'denied'
+          ? T('المتصفح رفض إذن الموقع. من أيقونة القفل بجانب الرابط اسمح بالموقع ثم أعد الفحص.')
+          : why === 'timeout'
+          ? T('انتهت مهلة تحديد الموقع. تأكد من تفعيل GPS/الموقع وأعد الفحص.')
+          : T('تعذر الحصول على الموقع. اسمح بالإذن من المتصفح وأعد الفحص.');
+        saveInfo.hidden = false;
+        saveInfo.textContent = tip + ' ' + T('يمكنك إلغاء «مشاركة الموقع» للمتابعة بدون خريطة.');
+        throw new Error(T('يلزم إذن الموقع لرسم القياس على الخريطة.'));
+      }
+      if (loc.accuracy > 2000) {
+        saveInfo.hidden = false;
+        saveInfo.textContent = T('دقة الموقع ضعيفة (~{meters} م). فعّل GPS في مكان مفتوح ثم أعد الفحص، أو ألغِ مشاركة الموقع.', {meters: Math.round(loc.accuracy)});
+        throw new Error(T('دقة الموقع غير كافية للخريطة.'));
+      }
+      status.textContent = T('تم تحديد الموقع') + ' (~' + Math.round(loc.accuracy) + ' m) • ' + T('بدء الجلسة…');
+    }
+
+    const session = await speedApi('/api/speed/sessions', {method: 'POST'});
+    const sid = session.session_id;
+    const h = {'X-Test-Session': sid, 'Cache-Control': 'no-store'};
+    status.textContent = T('قياس البنق…');
+    const pings = [];
+    for (let i = 0; i < 7; i++) {
+      const t0 = performance.now();
+      await speedApi('/api/speed/ping', {headers: h});
+      pings.push(performance.now() - t0);
+    }
+    const ping = pings.slice(1).reduce((a,b)=>a+b,0) / (pings.length - 1);
+    const payload = new Uint8Array(2 * MIB);
+    for (let off = 0; off < payload.length; off += 65536) {
+      crypto.getRandomValues(payload.subarray(off, Math.min(off + 65536, payload.length)));
+    }
+    async function transfer(down) {
+      let bytes = 0;
+      const t0 = performance.now();
+      const elapsed = () => (performance.now() - t0) / 1000;
+      while (bytes < LIMITS.phase_max_bytes &&
+             (elapsed() < LIMITS.target_seconds || bytes < LIMITS.min_bytes)) {
+        if (down) {
+          const buf = await speedApi('/api/speed/download?size=' + (2*MIB), {headers: h});
+          bytes += buf.byteLength;
+        } else {
+          const r = await speedApi('/api/speed/upload', {
+            method: 'POST', headers: Object.assign({'Content-Type': 'application/octet-stream'}, h),
+            body: payload
+          });
+          bytes += r.received_bytes;
+        }
+      }
+      const seconds = elapsed();
+      if (seconds < LIMITS.min_phase_seconds) {
+        throw new Error(T('الاتصال أسرع من أن يُقاس بدقة ضمن حد البيانات؛ النتيجة غير حاسمة ولم تُحفظ.'));
+      }
+      return [bytes, seconds];
+    }
+    status.textContent = T('تحميل…');
+    const [downBytes, dSec] = await transfer(true);
+    status.textContent = T('رفع…');
+    const [upBytes, uSec] = await transfer(false);
+    const download = downBytes * 8 / dSec / 1e6;
+    const upload = upBytes * 8 / uSec / 1e6;
+
+    const body = {
+      session_id: sid,
+      download_mbps: download,
+      upload_mbps: upload,
+      ping_ms: ping,
+      download_seconds: dSec,
+      upload_seconds: uSec,
+      download_bytes: downBytes,
+      upload_bytes: upBytes,
+      connection_type: 'unknown',
+      connection_source: 'unavailable',
+      share_location: false,
+      measurement_time: Date.now() / 1000,
+      test_status: 'completed'
+    };
+    if (locOk(loc) && loc.accuracy <= 2000) {
+      body.share_location = true;
+      body.latitude = loc.latitude;
+      body.longitude = loc.longitude;
+      body.location_accuracy_m = Math.max(1, loc.accuracy);
+    }
+
+    status.textContent = T('حفظ النتيجة…');
+    const saved = await speedApi('/api/network-tests', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+
+    metrics.hidden = false;
+    document.getElementById('dl').textContent = download.toFixed(1);
+    document.getElementById('ul').textContent = upload.toFixed(1);
+    document.getElementById('pg').textContent = ping.toFixed(0);
+
+    saveInfo.hidden = false;
+    if (saved.shared) {
+      const mapHref = {{ url_for('web_map')|tojson }} + '?focus=mine';
+      saveInfo.innerHTML = T('تم الرسم على الخريطة (خلية {cell}).', {cell: saved.cell_id || ''}) +
+        ' <a href="' + mapHref + '">' + T('افتح طبقة قياساتك') + '</a>';
+      status.textContent = T('تم الحفظ على الخادم ورُسم على الخريطة');
+    } else if (wantShare && !locOk(loc)) {
+      saveInfo.textContent = T('تم الحفظ بدون موقع — اسمح بإذن الموقع ثم أعد الفحص للرسم على الخريطة.');
+      status.textContent = T('تم الحفظ بدون موقع');
+    } else if (wantShare && locOk(loc) && loc.accuracy > 2000) {
+      saveInfo.textContent = T('دقة الموقع ضعيفة (~{meters} م) فلم يُرسم على الخريطة، لكن القياس محفوظ. فعّل GPS في مكان مفتوح وأعد الفحص.', {meters: Math.round(loc.accuracy)});
+      status.textContent = T('تم الحفظ (بدون خلية)');
+    } else {
+      saveInfo.textContent = T('تم الحفظ بدون مشاركة موقع. فعّل الخيار أعلاه للرسم على الخريطة.');
+      status.textContent = T('تم الحفظ على الخادم');
+    }
+
+    const complaintBox = document.getElementById('complaintBox');
+    const complaintStatus = document.getElementById('complaintStatus');
+    const btnComplaint = document.getElementById('btnComplaint');
+    const weak = download < 15 || ping > 120;
+    complaintBox.hidden = !weak;
+    complaintStatus.textContent = '';
+    btnComplaint.disabled = false;
+    btnComplaint.onclick = async () => {
+      btnComplaint.disabled = true;
+      complaintStatus.textContent = T('جارٍ إرسال البلاغ…');
+      try {
+        const payload = {
+          category: download < 5 ? 'outage' : 'slow',
+          severity: download < 5 || ping > 200 ? 4 : 3,
+          note: T('بلاغ تلقائي بعد فحص سرعة: ↓{dl} ↑{ul} بنق {pg}', {
+            dl: download.toFixed(1), ul: upload.toFixed(1), pg: ping.toFixed(0)
+          }),
+        };
+        if (locOk(loc) && loc.accuracy <= 2000) {
+          payload.latitude = loc.latitude;
+          payload.longitude = loc.longitude;
+        } else if (saved.cell_id) {
+          payload.cell_id = saved.cell_id;
+        }
+        await speedApi('/api/complaints', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        complaintStatus.textContent = T('تم تسجيل البلاغ في رادار الأعطال.');
+      } catch (err) {
+        complaintStatus.textContent = err.message || String(err);
+        btnComplaint.disabled = false;
+      }
+    };
+
+    status.textContent = (status.textContent || '') + ' • ' + T('جارٍ التحليل الذكي…');
+    aiBox.hidden = false;
+    aiOut.textContent = T('جارٍ التحليل…');
+    try {
+      const prompt =
+        T('حلّل نتيجة فحص سرعة شبكة للمستخدم في حائل/الموقع الحالي:') + '\n' +
+        T('- التحميل: {value} Mbps', {value: download.toFixed(1)}) + '\n' +
+        T('- الرفع: {value} Mbps', {value: upload.toFixed(1)}) + '\n' +
+        T('- البنق: {value} ms', {value: ping.toFixed(0)}) + '\n' +
+        (saved.shared
+          ? T('- رُسم على خلية: {cell}', {cell: saved.cell_id}) + '\n'
+          : T('- لم تُشارك إحداثيات على الخريطة') + '\n') +
+        T('اذكر تقييمًا مختصرًا وجودة الاستخدام اليومي ونصيحة واحدة عملية.');
+      const ai = await speedApi('/api/ai/analyze', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: prompt})
+      });
+      aiOut.textContent = ai.analysis || T('لا توجد نتيجة');
+      status.textContent = saved.shared
+        ? T('اكتمل: حفظ + خريطة + تحليل ذكي')
+        : T('اكتمل: حفظ + تحليل ذكي');
+    } catch (aiErr) {
+      aiOut.textContent = T('تعذر التحليل الذكي: ') + (aiErr.message || aiErr) +
+        '\n' + T('(تأكد أن المدير حفظ مفتاح Gemini في لوحة الإدارة)');
+    }
+  } catch (e) {
+    status.textContent = e.message || String(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = T('بدء الفحص');
+  }
+};
+{% endif %}
+
+{% if logged_in and ai_available %}
+document.getElementById('runAi').onclick = async () => {
+  const btn = document.getElementById('runAi');
+  const text = document.getElementById('aiText').value.trim();
+  const msg = document.getElementById('aiMsg');
+  const out = document.getElementById('aiOut');
+  msg.hidden = true;
+  if (text.length < 3) {
+    msg.hidden = false;
+    msg.textContent = T('اكتب وصفًا أطول قليلاً');
+    return;
+  }
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> ' + T('جارٍ التحليل…');
+  out.textContent = T('جارٍ التحليل…');
+  try {
+    const res = await fetch('/api/ai/analyze', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({text})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || T('فشل التحليل'));
+    out.textContent = data.analysis || '';
+  } catch (e) {
+    out.textContent = '';
+    msg.hidden = false;
+    msg.textContent = e.message || String(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = T('حلّل الآن');
+  }
+};
+{% endif %}
+
+if (location.hash) {
+  const el = document.querySelector(location.hash);
+  if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+}
+</script>
+{% endblock %}

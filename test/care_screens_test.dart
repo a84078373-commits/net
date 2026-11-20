@@ -1,13 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smartcare/app_store.dart';
 import 'package:smartcare/care_screens.dart';
+import 'package:smartcare/l10n/app_localizations.dart';
 import 'package:smartcare/main.dart';
+import 'package:smartcare/mystc_pages.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:smartcare/network/network_api.dart';
+
+Widget wrap(Widget child) => MaterialApp(
+  locale: const Locale('ar'),
+  supportedLocales: AppLocalizations.supportedLocales,
+  localizationsDelegates: const [
+    AppLocalizations.delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+  ],
+  home: child,
+);
 
 void main() {
   testWidgets('Create a report and close it from its detail screen', (
@@ -15,15 +30,7 @@ void main() {
   ) async {
     appStore.autoSave = false;
     appStore.reports.clear();
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData.dark(useMaterial3: true),
-        home: const Directionality(
-          textDirection: TextDirection.rtl,
-          child: NewReportScreen(),
-        ),
-      ),
-    );
+    await tester.pumpWidget(wrap(const NewReportScreen()));
     await tester.enterText(
       find.byType(TextFormField),
       'انقطاع متكرر في الإنترنت مساءً في المنزل',
@@ -58,6 +65,7 @@ void main() {
     final reopened = AppStore();
     await reopened.load();
     expect(reopened.name, 'أحمد');
+    expect(reopened.area, 'naqrah');
     expect(reopened.reports.single.id, report.id);
     expect(reopened.reports.single.status, 'قيد المراجعة التجريبية');
     expect(reopened.measurements.single.area, 'النقرة');
@@ -93,15 +101,7 @@ void main() {
         const HelpScreen(),
         const PrivacyScreen(),
       ]) {
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: ThemeData.dark(useMaterial3: true),
-            home: Directionality(
-              textDirection: TextDirection.rtl,
-              child: screen,
-            ),
-          ),
-        );
+        await tester.pumpWidget(wrap(screen));
         await tester.pump();
         expect(tester.takeException(), isNull, reason: '$screen at $width');
         await tester.pumpWidget(const SizedBox());
@@ -130,9 +130,12 @@ void main() {
       await networkApi.signOut();
     });
     await tester.pumpWidget(const SmartCare());
-    await tester.tap(find.byTooltip('حسابي والمزيد'));
+    // Skip splash
+    await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
-    final context = tester.element(find.byType(MoreScreen));
+    await tester.tap(find.text('المزيد'));
+    await tester.pumpAndSettle();
+    final context = tester.element(find.byType(MystcMoreTab));
     openCare(context, const AuthScreen());
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).at(0), '0512345678');
@@ -146,7 +149,6 @@ void main() {
     expect(appStore.signedIn, true);
     expect(appStore.phone, '0512345678');
     expect(networkApi.token, 'test-only-session');
-    expect(find.byType(MoreScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -1,11 +1,22 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final appStore = AppStore();
+const neighborhoodKeys = ['muntazah', 'naqrah', 'jamiin', 'central'];
+const _legacyNeighborhoods = {
+  'المنتزه': 'muntazah',
+  'النقرة': 'naqrah',
+  'الجامعيين': 'jamiin',
+  'وسط حائل': 'central',
+};
+@Deprecated('Use neighborhoodKeys + l10n')
 const neighborhoods = ['المنتزه', 'النقرة', 'الجامعيين', 'وسط حائل'];
 String dateLabel(DateTime date) =>
     '${date.day}/${date.month}/${date.year} • ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+String normalizeAreaKey(String value) =>
+    _legacyNeighborhoods[value] ??
+    (neighborhoodKeys.contains(value) ? value : neighborhoodKeys.first);
 
 class CareReport {
   final String id, description, area, category, recommendation;
@@ -93,23 +104,35 @@ class AppStore extends ChangeNotifier {
   final reports = <CareReport>[];
   final measurements = <Measurement>[];
   final notices = <CareNotice>[];
-  String name = 'زائر SmartCare', phone = '', area = neighborhoods.first;
+  String name = 'زائر SmartCare', phone = '', area = neighborhoodKeys.first;
+  /// `ar` or `en` — drives MaterialApp locale and RTL/LTR.
+  String localeCode = 'ar';
   bool signedIn = false, notifications = true, autoSave = true;
   bool storageFailed = false;
   DateTime? lastSaved;
   int get unread => notices.where((n) => !n.read).length;
+  Locale get locale => Locale(localeCode == 'en' ? 'en' : 'ar');
+  bool get isEnglish => localeCode == 'en';
+
   Future<void> load() async {
     try {
       _prefs = await SharedPreferences.getInstance();
+      final savedLocale = _prefs!.getString('smartcare.locale');
+      if (savedLocale == 'en' || savedLocale == 'ar') {
+        localeCode = savedLocale!;
+      }
       final text = _prefs!.getString('smartcare.v1');
       if (text != null) {
         final j = jsonDecode(text) as Map<String, dynamic>;
         name = j['name'];
         phone = j['phone'];
-        area = j['area'];
+        area = normalizeAreaKey('${j['area'] ?? neighborhoodKeys.first}');
         signedIn = j['signedIn'] == true;
         notifications = j['notifications'];
         autoSave = j['autoSave'];
+        if (j['locale'] == 'en' || j['locale'] == 'ar') {
+          localeCode = j['locale'];
+        }
         reports.addAll(
           (j['reports'] as List).map((r) => CareReport.fromJson(r)),
         );
@@ -127,16 +150,28 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setLocaleCode(String code) async {
+    final next = code == 'en' ? 'en' : 'ar';
+    if (next == localeCode) return;
+    localeCode = next;
+    try {
+      await _prefs?.setString('smartcare.locale', localeCode);
+    } catch (_) {}
+    changed();
+  }
+
   Future<void> save() async {
     try {
       if (_prefs != null) {
         final now = DateTime.now();
+        await _prefs!.setString('smartcare.locale', localeCode);
         final ok = await _prefs!.setString(
           'smartcare.v1',
           jsonEncode({
             'name': name,
             'phone': phone,
             'area': area,
+            'locale': localeCode,
             'signedIn': signedIn,
             'notifications': notifications,
             'autoSave': autoSave,

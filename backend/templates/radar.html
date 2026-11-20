@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}{{ _('رادار الأعطال الاستباقي') }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+{% endblock %}
+{% block content %}
+<section class="radar-sim" aria-labelledby="radar-title">
+  <header class="radar-sim-hero">
+    <div class="radar-sim-hero-copy">
+      <p class="twin-kicker">{{ _('للفني') }} · Predictive Outage Radar</p>
+      <h1 id="radar-title">{{ _('رادار الأعطال الاستباقي') }}</h1>
+      <p>{{ _('شاشة عمليات حية: إنذارات مبكرة، أولوية الأحياء، ومخطط 24 ساعة — بنفس روح غرفة التحكم.') }}</p>
+    </div>
+    <div class="twin-gauges" aria-live="polite">
+      <div class="twin-kpi-pill"><b id="rCritical">0</b><span>{{ _('حرج') }}</span></div>
+      <div class="twin-kpi-pill"><b id="rHigh">0</b><span>{{ _('مرتفع') }}</span></div>
+      <div class="twin-kpi-pill"><b id="rWatch">0</b><span>{{ _('مراقبة') }}</span></div>
+      <div class="twin-kpi-pill"><b id="rTracked">0</b><span>{{ _('خلايا على الرادار') }}</span></div>
+    </div>
+  </header>
+
+  <div class="radar-stage">
+    <div id="radarMap" class="radar-stage-map" dir="ltr" role="application" aria-label="{{ _('خريطة رادار الأعطال') }}"></div>
+    <div class="twin-scanline" aria-hidden="true"></div>
+    <div class="radar-sweep" aria-hidden="true"></div>
+
+    <aside class="radar-console" aria-label="{{ _('قائمة أولوية الفني') }}">
+      <div class="twin-console-head">
+        <h2>{{ _('غرفة العمليات') }}</h2>
+        <span class="twin-live-dot">LIVE</span>
+      </div>
+      <div class="radar-console-actions">
+        <button type="button" class="twin-run" id="btnRefreshRadar">
+          <span class="twin-run-glow" aria-hidden="true"></span>
+          {{ _('تحديث الرادار') }}
+        </button>
+        <a class="twin-reset" href="{{ url_for('web_map') }}?focus=radar">{{ _('الخريطة الكاملة') }}</a>
+      </div>
+      <div id="techQueue" class="radar-ops-queue"></div>
+      <p class="twin-hint" id="techEmpty">{{ _('لا إنذارات حاليًا — الرادار يراقب الشكاوى والقياسات.') }}</p>
+      <p class="twin-note" id="radarHint"></p>
+    </aside>
+
+    <aside class="radar-intel" aria-label="{{ _('تدهور الشبكة خلال 24 ساعة') }}">
+      <div class="twin-intel-head">
+        <h2>{{ _('مخطط 24 ساعة') }}</h2>
+        <span class="twin-sim-badge">RADAR</span>
+      </div>
+      <div class="radar-chart-wrap">
+        <canvas id="radarOpsChart" aria-label="{{ _('شريط زمني لمؤشر خطر الأعطال') }}"></canvas>
+      </div>
+      <div class="radar-intel-footer" id="radarIntelFoot"></div>
+    </aside>
+
+    <div class="twin-legend">
+      <span><i style="background:#ff1744"></i>{{ _('حرج') }}</span>
+      <span><i style="background:#ff375e"></i>{{ _('مرتفع') }}</span>
+      <span><i style="background:#FF914D"></i>{{ _('مراقبة') }}</span>
+      <span><i style="background:#1bced8"></i>{{ _('تتبع') }}</span>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<script>
+const BOUNDS = {{ bounds|tojson }};
+const TOKEN = {{ token|tojson }};
+const CARTO_KEY = {{ (carto_api_key or '')|tojson }};
+const headers = TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {};
+const LEVEL = {
+  critical: T('حرج'),
+  high: T('مرتفع'),
+  watch: T('مراقبة'),
+  info: T('تتبع'),
+};
+const LEVEL_COLOR = {
+  critical: '#ff1744',
+  high: '#ff375e',
+  watch: '#FF914D',
+  info: '#1bced8',
+};
+
+const center = [(BOUNDS[1] + BOUNDS[3]) / 2, (BOUNDS[0] + BOUNDS[2]) / 2];
+const map = L.map('radarMap', {
+  zoomControl: false,
+  attributionControl: false,
+  preferCanvas: true,
+}).setView(center, 11);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+const tiles = CARTO_KEY
+  ? 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=' + encodeURIComponent(CARTO_KEY)
+  : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+L.tileLayer(tiles, { maxZoom: CARTO_KEY ? 20 : 16 }).addTo(map);
+L.rectangle([[BOUNDS[1], BOUNDS[0]], [BOUNDS[3], BOUNDS[2]]], {
+  color: '#a78bfa', weight: 1.5, fillOpacity: 0.025, dashArray: '8 6', interactive: false,
+}).addTo(map);
+
+const layer = L.layerGroup().addTo(map);
+let heatLayer = null;
+let chart = null;
+let lastQueue = [];
+
+function clearHeat() {
+  if (heatLayer) {
+    map.removeLayer(heatLayer);
+    heatLayer = null;
+  }
+}
+
+function drawChart(timeline) {
+  const canvas = document.getElementById('radarOpsChart');
+  if (!canvas || !window.Chart) return;
+  const labels = (timeline || []).map((x) => x.label);
+  const risk = (timeline || []).map((x) => Math.round((x.risk_index || 0) * 100));
+  const ping = (timeline || []).map((x) => (x.avg_ping_ms == null ? null : x.avg_ping_ms));
+  if (chart) chart.destroy();
+  chart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: T('مؤشر الخطر'),
+          data: risk,
+          borderColor: '#ff375e',
+          backgroundColor: 'rgba(255,55,94,0.18)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 0,
+          borderWidth: 2.2,
+          yAxisID: 'y',
+        },
+        {
+          label: T('زمن الاستجابة'),
+          data: ping,
+          borderColor: '#7c6cf0',
+          borderDash: [4, 4],
+          tension: 0.35,
+          pointRadius: 0,
+          borderWidth: 1.5,
+          yAxisID: 'y1',
+          spanGaps: true,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: 'rgba(255,255,255,0.7)', boxWidth: 10, font: { size: 11 } },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          ticks: { color: 'rgba(255,255,255,0.55)', callback: (v) => v + '%' },
+          grid: { color: 'rgba(255,55,94,0.1)' },
+          border: { display: false },
+        },
+        y1: {
+          position: 'right',
+          beginAtZero: true,
+          ticks: { color: 'rgba(255,255,255,0.45)', callback: (v) => v + ' ms' },
+          grid: { display: false },
+          border: { display: false },
+        },
+        x: {
+          ticks: { color: 'rgba(255,255,255,0.45)', maxTicksLimit: 7 },
+          grid: { display: false },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function focusAlert(a) {
+  if (!a || !a.bounds) return;
+  const b = a.bounds;
+  map.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [56, 56], maxZoom: 14 });
+  document.getElementById('radarHint').textContent = a.message || '';
+}
+
+async function loadRadar() {
+  const bbox = BOUNDS.join(',');
+  const data = await fetch('/api/outage-radar?bbox=' + encodeURIComponent(bbox), { headers })
+    .then((r) => r.json());
+  const sum = data.summary || {};
+  document.getElementById('rCritical').textContent = String(sum.critical || 0);
+  document.getElementById('rHigh').textContent = String(sum.high || 0);
+  document.getElementById('rWatch').textContent = String(sum.watch || 0);
+
+  const viz = data.viz_cells || data.alerts || [];
+  const queue = (data.priority_queue || []).length
+    ? data.priority_queue
+    : viz.slice(0, 8);
+  lastQueue = queue;
+  document.getElementById('rTracked').textContent = String(viz.length);
+
+  const empty = document.getElementById('techEmpty');
+  const box = document.getElementById('techQueue');
+  layer.clearLayers();
+  clearHeat();
+
+  const heatPts = [];
+  viz.forEach((a) => {
+    const b = a.bounds;
+    const color = LEVEL_COLOR[a.level] || '#1bced8';
+    const alertish = a.level !== 'info';
+    L.rectangle([[b[1], b[0]], [b[3], b[2]]], {
+      color,
+      weight: alertish ? 2.2 : 1,
+      fillColor: color,
+      fillOpacity: alertish ? 0.2 + a.risk * 0.25 : 0.1 + a.risk * 0.12,
+      className: alertish ? 'radar-cell radar-cell-hot' : 'radar-cell',
+    }).bindPopup(
+      `<div class="twin-pop"><strong>${LEVEL[a.level] || a.level}</strong><span>${a.message || ''}</span></div>`
+    ).addTo(layer);
+
+    const c = [a.lat || (b[1] + b[3]) / 2, a.lon || (b[0] + b[2]) / 2];
+    L.marker(c, {
+      icon: L.divIcon({
+        className: 'radar-blip-wrap',
+        html: `<div class="radar-blip ${a.level}"><i></i><span>${Math.round(a.risk * 100)}</span></div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      }),
+    }).bindPopup(
+      `<div class="twin-pop"><strong>${a.label || a.id}</strong><span>${a.message || ''}</span></div>`
+    ).addTo(layer);
+
+    heatPts.push([c[0], c[1], Math.max(0.12, Math.min(1, a.risk))]);
+  });
+
+  if (heatPts.length && L.heatLayer) {
+    heatLayer = L.heatLayer(heatPts, {
+      radius: 48,
+      blur: 32,
+      maxZoom: 17,
+      minOpacity: 0.35,
+      gradient: {
+        0.0: 'rgba(27,206,216,0)',
+        0.2: '#1bced8',
+        0.45: '#F5D76E',
+        0.7: '#FF914D',
+        1.0: '#ff1744',
+      },
+    }).addTo(map);
+  }
+
+  // City-wide sweep ring so the stage never feels empty.
+  L.circle(center, {
+    radius: 18000,
+    color: '#1bced8',
+    weight: 1,
+    dashArray: '4 10',
+    fillOpacity: 0.02,
+    interactive: false,
+    className: 'radar-city-ring',
+  }).addTo(layer);
+
+  if (!queue.length) {
+    empty.hidden = false;
+    box.innerHTML = '';
+    document.getElementById('radarHint').textContent = T('لا إنذار مبكر الآن — استمر بالمراقبة.');
+  } else {
+    empty.hidden = true;
+    const alertsOnly = queue.filter((a) => a.level !== 'info');
+    empty.hidden = alertsOnly.length > 0;
+    if (!alertsOnly.length) {
+      empty.hidden = false;
+      empty.textContent = T('لا إنذارات حرجة — هذه خلايا تحت التتبع الحي.');
+    }
+    box.innerHTML = queue.map((a, i) => `
+      <button type="button" class="radar-ops-item ${a.level}" data-i="${i}">
+        <span class="radar-ops-rank">${i + 1}</span>
+        <span class="radar-ops-body">
+          <strong>${a.label || a.id} · ${LEVEL[a.level] || a.level}</strong>
+          <small>${a.message || ''}</small>
+        </span>
+        <span class="radar-ops-score">${Math.round((a.risk || 0) * 100)}%</span>
+      </button>`).join('');
+    box.querySelectorAll('.radar-ops-item').forEach((btn) => {
+      btn.addEventListener('click', () => focusAlert(queue[Number(btn.dataset.i)]));
+    });
+    focusAlert(queue[0]);
+  }
+
+  const foot = document.getElementById('radarIntelFoot');
+  const peak = Math.max(0, ...((data.timeline_24h || []).map((x) => x.risk_index || 0)));
+  foot.textContent = T('ذروة مؤشر الخطر خلال اليوم:') + ' ' + Math.round(peak * 100) + '%';
+  drawChart(data.timeline_24h || []);
+
+  map.fitBounds([[BOUNDS[1], BOUNDS[0]], [BOUNDS[3], BOUNDS[2]]], { padding: [40, 40] });
+  setTimeout(() => map.invalidateSize(), 160);
+}
+
+document.getElementById('btnRefreshRadar').onclick = () => {
+  loadRadar().catch((e) => {
+    document.getElementById('techEmpty').hidden = false;
+    document.getElementById('techEmpty').textContent = e.message || String(e);
+  });
+};
+
+function boot() {
+  loadRadar().catch((e) => {
+    document.getElementById('techEmpty').textContent = e.message || String(e);
+  });
+}
+if (window.Chart) boot();
+else {
+  const t = setInterval(() => {
+    if (window.Chart) {
+      clearInterval(t);
+      boot();
+    }
+  }, 40);
+  setTimeout(() => {
+    clearInterval(t);
+    boot();
+  }, 4000);
+}
+</script>
+{% endblock %}

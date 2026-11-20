@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'l10n/app_localizations.dart';
 import 'network/network_api.dart';
 import 'network/network_test_screen.dart';
 import 'network/speed_test_service.dart';
@@ -134,6 +135,46 @@ class _NetworkMapState extends State<NetworkMap> {
     }
   }
 
+  String _metricLabel(AppLocalizations l10n, String metric) {
+    switch (metric) {
+      case 'upload':
+        return l10n.upload;
+      case 'ping':
+        return l10n.httpLatency;
+      case 'density':
+        return l10n.metricDensityOnly;
+      default:
+        return l10n.download;
+    }
+  }
+
+  String _connectionLabel(AppLocalizations l10n, String connection) {
+    switch (connection) {
+      case 'wifi':
+        return l10n.connectionWifi;
+      case 'cellular':
+        return l10n.connectionCellular;
+      case 'ethernet':
+        return l10n.connectionEthernet;
+      case 'unknown':
+        return l10n.unknown;
+      default:
+        return l10n.allConnections;
+    }
+  }
+
+  String _qualityDescription(AppLocalizations l10n) {
+    final quality = configuration?['quality'];
+    if (quality == null) return l10n.mapQualityGuidelinesFallback;
+    if (l10n.isArabic) {
+      return (quality['description_ar'] as String?) ??
+          l10n.mapQualityGuidelinesFallback;
+    }
+    return (quality['description_en'] as String?) ??
+        (quality['description_ar'] as String?) ??
+        l10n.mapQualityGuidelinesFallback;
+  }
+
   Color color(QualityCell cell) {
     if (filters.metric == 'density' &&
         (cell.status == 'ready' || cell.status == 'personal')) {
@@ -163,21 +204,20 @@ class _NetworkMapState extends State<NetworkMap> {
     ),
   );
   Future<void> locate() async {
+    final l10n = context.l10n;
     final yes = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('العودة إلى موقعي'),
-        content: const Text(
-          'سيُطلب إذن الموقع لتحريك الخريطة إلى مكانك الحالي (أي مدينة/دولة). الافتراضي عند الفتح هو حائل. طلب الخريطة يرسل حدود العرض الظاهرة فقط ولا يحفظ GPS دقيقًا من هنا.',
-        ),
+        title: Text(l10n.goToMyLocationTitle),
+        content: Text(l10n.goToMyLocationBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: const Text('إلغاء'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('السماح'),
+            child: Text(l10n.allow),
           ),
         ],
       ),
@@ -191,113 +231,126 @@ class _NetworkMapState extends State<NetworkMap> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'الموقع غير متاح أو لم يُمنح الإذن؛ يمكنك استكشاف الخريطة يدويًا',
-            ),
-          ),
+          SnackBar(content: Text(l10n.locationUnavailableSnack)),
         );
       }
     }
   }
 
   void info(QualityCell? cell) {
+    final l10n = context.l10n;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (c) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+      builder: (c) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                cell == null ? l10n.mapDataTitle : l10n.cellSummaryTitle,
+                style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 14),
+              if (cell == null) ...[
                 Text(
-                  cell == null ? 'بيانات الخريطة' : 'ملخص الخلية الجغرافية',
+                  error ??
+                      (cells.isEmpty
+                          ? l10n.mapNoDataMessage
+                          : l10n.mapCellsAvailable(cells.length)),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  refreshed == null
+                      ? l10n.mapNoServerData
+                      : l10n.mapLastUpdate('$refreshed'),
+                ),
+                const SizedBox(height: 12),
+                Text(l10n.mapGrayCellsNote),
+              ] else ...[
+                Text(
+                  l10n.cellIdLine(cell.id),
                   style: const TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.bold,
+                    color: StcColors.purple,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 14),
-                if (cell == null) ...[
-                  Text(
-                    error ??
-                        (cells.isEmpty
-                            ? 'لا توجد بيانات منشورة كافية ضمن الحدود والفلاتر الحالية. هذا لا يعني أن الشبكة ضعيفة.'
-                            : '${cells.length} خلية متاحة؛ اضغط منطقة ملونة لاستعراض مؤشرات منفصلة.'),
+                const SizedBox(height: 10),
+                Text(
+                  cell.status == 'ready'
+                      ? l10n.cellStatusReady
+                      : cell.status == 'stale'
+                      ? l10n.cellStatusStale
+                      : l10n.cellStatusInsufficient,
+                ),
+                Text(
+                  l10n.cellValidSamplesLine(
+                    '${cell.count ?? l10n.cellSamplesWithheld}',
                   ),
-                  const SizedBox(height: 12),
+                ),
+                if (cell.data['age_hours'] != null)
                   Text(
-                    refreshed == null
-                        ? 'لم تصل بيانات من الخادم'
-                        : 'آخر تحديث: $refreshed',
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'الرمادي: عينة غير كافية أو بيانات قديمة. تُخفى الخلايا التي يقل عدد مساهميها عن الحد المسموح.',
-                  ),
-                ] else ...[
-                  Text(
-                    'خلية ${cell.id}',
-                    style: const TextStyle(
-                      color: StcColors.purple,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                    l10n.cellAgeHoursValue(
+                      (cell.data['age_hours'] as num).toInt(),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                if (cell.data['last_measurement'] != null)
                   Text(
-                    cell.status == 'ready'
-                        ? 'العينة مستوفية للحد الأدنى، وليست ضمانًا للأداء'
-                        : cell.status == 'stale'
-                        ? 'بيانات قديمة؛ لا يصدر تصنيف حديث'
-                        : 'بيانات غير كافية؛ لا يصدر حكم على جودة المنطقة',
-                  ),
-                  Text(
-                    'العينات الصالحة: ${cell.count ?? 'غير منشور لحماية الخصوصية'}',
-                  ),
-                  if (cell.data['age_hours'] != null)
-                    Text('عمر أحدث قياس: ${cell.data['age_hours']} ساعة'),
-                  if (cell.data['last_measurement'] != null)
-                    Text(
-                      'آخر قياس: ${DateTime.fromMillisecondsSinceEpoch(((cell.data['last_measurement'] as num) * 1000).round()).toLocal()}',
+                    l10n.cellLastMeasurementValue(
+                      DateTime.fromMillisecondsSinceEpoch(
+                        ((cell.data['last_measurement'] as num) * 1000)
+                            .round(),
+                      ).toLocal().toString(),
                     ),
-                  const SizedBox(height: 12),
-                  for (final m in [
-                    ('download_mbps', 'التنزيل', 'Mbps'),
-                    ('upload_mbps', 'الرفع', 'Mbps'),
-                    ('ping_ms', 'استجابة HTTP', 'ms'),
-                  ])
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Text(
-                        '${m.$2}: المتوسط ${cell.value(m.$1, 'mean')?.toStringAsFixed(2) ?? '—'} • الوسيط ${cell.value(m.$1, 'median')?.toStringAsFixed(2) ?? '—'} ${m.$3}',
+                  ),
+                const SizedBox(height: 12),
+                for (final m in [
+                  ('download_mbps', 'download', 'Mbps'),
+                  ('upload_mbps', 'upload', 'Mbps'),
+                  ('ping_ms', 'ping', 'ms'),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      l10n.cellMetricRow(
+                        m.$2 == 'download'
+                            ? l10n.download
+                            : m.$2 == 'upload'
+                            ? l10n.upload
+                            : l10n.httpLatency,
+                        cell.value(m.$1, 'mean')?.toStringAsFixed(2) ?? '—',
+                        cell.value(m.$1, 'median')?.toStringAsFixed(2) ?? '—',
+                        m.$3,
                       ),
                     ),
-                  const Text(
-                    'Jitter وفقد الحزم: غير متاحين. شركة الاتصالات: غير معلومة. لا تُعرض مواقع أفراد أو هوياتهم.',
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'فترة التحليل: ${filters.start.toLocal().toString().substring(0, 16)} — ${filters.end.toLocal().toString().substring(0, 16)}',
+                Text(l10n.cellTechnicalDisclaimer),
+                const SizedBox(height: 12),
+                Text(
+                  l10n.cellAnalysisPeriodRange(
+                    filters.start.toLocal().toString().substring(0, 16),
+                    filters.end.toLocal().toString().substring(0, 16),
                   ),
-                ],
-                const SizedBox(height: 18),
-                const Text(
-                  'الألوان تمثل المؤشر المختار فقط؛ كثافة القياسات لا تعني جودة أفضل.',
-                  style: TextStyle(color: StcColors.purple),
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () => Navigator.pop(c),
-                  child: const Text('إغلاق'),
                 ),
               ],
-            ),
+              const SizedBox(height: 18),
+              Text(
+                l10n.mapColorsDisclaimer,
+                style: const TextStyle(color: StcColors.purple),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.pop(c),
+                child: Text(l10n.close),
+              ),
+            ],
           ),
         ),
       ),
@@ -305,71 +358,61 @@ class _NetworkMapState extends State<NetworkMap> {
   }
 
   void legend() {
+    final l10n = context.l10n;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'دليل الخريطة',
-                style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 14),
-              if (filters.metric == 'density')
-                const Text(
-                  'البنفسجي الأغمق: قياسات منشورة أكثر. لا يمثل جودة الاتصال.',
-                )
-              else
-                for (final item in [
-                  ('good', 'جيدة'),
-                  ('moderate', 'متوسطة'),
-                  ('poor', 'ضعيفة'),
-                  ('very_poor', 'ضعيفة جدًا'),
-                  ('insufficient', 'عينة غير كافية أو بيانات قديمة'),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 15,
-                          height: 15,
-                          color: Color(
-                            int.parse(
-                                  ((configuration?['quality']?['colors']?[item
-                                                  .$1] ??
-                                              '#7B8193')
-                                          as String)
-                                      .substring(1),
-                                  radix: 16,
-                                ) |
-                                0xFF000000,
-                          ),
+      builder: (_) => SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.mapLegendTitle,
+              style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 14),
+            if (filters.metric == 'density')
+              Text(l10n.legendDensity)
+            else
+              for (final item in [
+                ('good', l10n.qualityGood),
+                ('moderate', l10n.qualityModerate),
+                ('poor', l10n.qualityPoor),
+                ('very_poor', l10n.qualityVeryPoor),
+                ('insufficient', l10n.qualityInsufficient),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 15,
+                        height: 15,
+                        color: Color(
+                          int.parse(
+                                ((configuration?['quality']?['colors']?[item.$1] ??
+                                            '#7B8193')
+                                        as String)
+                                    .substring(1),
+                                radix: 16,
+                              ) |
+                              0xFF000000,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(child: Text(item.$2)),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(item.$2)),
+                    ],
                   ),
-              const SizedBox(height: 10),
-              Text(
-                configuration?['quality']?['description_ar'] ??
-                    'حدود إرشادية للمشروع، وليست معيارًا رسميًا.',
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'الحد الأدنى: ${filters.minSamples} قياسات و3 مساهمين مختلفين على الأقل. الأسماء الإدارية غير مستنتجة من الخلايا.',
-              ),
-              const SizedBox(height: 15),
-            ],
-          ),
+                ),
+            const SizedBox(height: 10),
+            Text(_qualityDescription(l10n)),
+            const SizedBox(height: 8),
+            Text(l10n.mapLegendMinSamplesNote(filters.minSamples)),
+            const SizedBox(height: 15),
+          ],
         ),
       ),
     );
@@ -390,35 +433,38 @@ class _NetworkMapState extends State<NetworkMap> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => Directionality(
-          textDirection: TextDirection.rtl,
-          child: SafeArea(
+        builder: (c, update) {
+          final sheetL10n = AppLocalizations.of(c);
+          return SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(22),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'فلاتر البيانات',
-                    style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+                  Text(
+                    sheetL10n.dataFiltersTitle,
+                    style: const TextStyle(
+                      fontSize: 23,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     initialValue: view,
                     isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'اختيار منطقة العرض',
+                    decoration: InputDecoration(
+                      labelText: sheetL10n.viewAreaLabel,
                     ),
                     items: [
-                      const DropdownMenuItem(
+                      DropdownMenuItem(
                         value: 'city',
-                        child: Text('حائل • عرض المدينة'),
+                        child: Text(sheetL10n.viewCityHail),
                       ),
                       for (final cell in cells)
                         DropdownMenuItem(
                           value: cell.id,
-                          child: Text('خلية ${cell.id}'),
+                          child: Text(sheetL10n.cellIdLine(cell.id)),
                         ),
                     ],
                     onChanged: (v) => update(() => view = v!),
@@ -429,7 +475,11 @@ class _NetworkMapState extends State<NetworkMap> {
                     children: [
                       for (final d in [1, 7, 30])
                         ChoiceChip(
-                          label: Text(d == 1 ? 'آخر 24 ساعة' : 'آخر $d يومًا'),
+                          label: Text(
+                            d == 1
+                                ? sheetL10n.filterLast24h
+                                : sheetL10n.filterLastDays(d),
+                          ),
                           selected: days == d,
                           onSelected: (_) => update(() {
                             days = d;
@@ -460,31 +510,31 @@ class _NetworkMapState extends State<NetworkMap> {
                       }
                     },
                     icon: const Icon(Icons.date_range),
-                    label: const Text('نطاق تاريخ مخصص'),
+                    label: Text(sheetL10n.customDateRange),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: metric,
                     isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'المؤشر المعروض',
+                    decoration: InputDecoration(
+                      labelText: sheetL10n.displayMetric,
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                         value: 'download',
-                        child: Text('جودة التنزيل'),
+                        child: Text(sheetL10n.metricDownloadQuality),
                       ),
                       DropdownMenuItem(
                         value: 'upload',
-                        child: Text('جودة الرفع'),
+                        child: Text(sheetL10n.metricUploadQuality),
                       ),
                       DropdownMenuItem(
                         value: 'ping',
-                        child: Text('جودة الاستجابة HTTP'),
+                        child: Text(sheetL10n.metricHttpQuality),
                       ),
                       DropdownMenuItem(
                         value: 'density',
-                        child: Text('كثافة القياسات فقط'),
+                        child: Text(sheetL10n.metricDensityOnly),
                       ),
                     ],
                     onChanged: (v) => update(() => metric = v!),
@@ -493,24 +543,35 @@ class _NetworkMapState extends State<NetworkMap> {
                   DropdownButtonFormField<String>(
                     initialValue: connection,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'نوع الاتصال'),
-                    items: const [
+                    decoration: InputDecoration(
+                      labelText: sheetL10n.connectionType,
+                    ),
+                    items: [
                       DropdownMenuItem(
                         value: 'all',
-                        child: Text('جميع الاتصالات'),
+                        child: Text(sheetL10n.allConnections),
                       ),
-                      DropdownMenuItem(value: 'wifi', child: Text('واي فاي')),
-                      DropdownMenuItem(value: 'cellular', child: Text('خلوي')),
-                      DropdownMenuItem(value: 'ethernet', child: Text('سلكي')),
+                      DropdownMenuItem(
+                        value: 'wifi',
+                        child: Text(sheetL10n.connectionWifi),
+                      ),
+                      DropdownMenuItem(
+                        value: 'cellular',
+                        child: Text(sheetL10n.connectionCellular),
+                      ),
+                      DropdownMenuItem(
+                        value: 'ethernet',
+                        child: Text(sheetL10n.connectionEthernet),
+                      ),
                       DropdownMenuItem(
                         value: 'unknown',
-                        child: Text('غير معروف'),
+                        child: Text(sheetL10n.unknown),
                       ),
                     ],
                     onChanged: (v) => update(() => connection = v!),
                   ),
                   const SizedBox(height: 16),
-                  Text('الحد الأدنى للعينات: $minSamples'),
+                  Text('${sheetL10n.minSamplesLabel}: $minSamples'),
                   Slider(
                     value: minSamples.toDouble(),
                     min: baseMinimum.toDouble(),
@@ -518,7 +579,7 @@ class _NetworkMapState extends State<NetworkMap> {
                     divisions: 9,
                     onChanged: (v) => update(() => minSamples = v.round()),
                   ),
-                  Text('تنزيل لا يقل عن ${minDown.toInt()} Mbps'),
+                  Text(sheetL10n.filterMinDownloadAtLeast(minDown.toInt())),
                   Slider(
                     value: minDown,
                     min: 0,
@@ -528,8 +589,8 @@ class _NetworkMapState extends State<NetworkMap> {
                   ),
                   Text(
                     maxPing == 10000
-                        ? 'الاستجابة: دون حد إضافي'
-                        : 'الاستجابة لا تتجاوز ${maxPing.toInt()} ms',
+                        ? sheetL10n.filterPingNoExtraCap
+                        : sheetL10n.filterPingAtMost(maxPing.toInt()),
                   ),
                   Slider(
                     value: maxPing == 10000 ? 500 : maxPing,
@@ -539,9 +600,12 @@ class _NetworkMapState extends State<NetworkMap> {
                     onChanged: (v) =>
                         update(() => maxPing = v == 500 ? 10000 : v),
                   ),
-                  const Text(
-                    'شركة الاتصالات غير متاحة من مصدر موثوق؛ فلترها غير مفعّل.',
-                    style: TextStyle(color: StcColors.silver, fontSize: 11),
+                  Text(
+                    sheetL10n.mapCarrierFilterUnavailable,
+                    style: const TextStyle(
+                      color: StcColors.silver,
+                      fontSize: 11,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
@@ -566,7 +630,7 @@ class _NetworkMapState extends State<NetworkMap> {
                       }
                       Navigator.pop(c, true);
                     },
-                    child: const Text('تطبيق الفلاتر'),
+                    child: Text(sheetL10n.applyFilters),
                   ),
                   TextButton(
                     onPressed: () {
@@ -581,13 +645,13 @@ class _NetworkMapState extends State<NetworkMap> {
                       filters.maxPing = 10000;
                       Navigator.pop(c, true);
                     },
-                    child: const Text('إعادة ضبط الفلاتر'),
+                    child: Text(sheetL10n.resetFilters),
                   ),
                 ],
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     ).then((changed) {
       if (changed == true && mounted) refresh();
@@ -595,6 +659,7 @@ class _NetworkMapState extends State<NetworkMap> {
   }
 
   void compare() {
+    final l10n = context.l10n;
     final valid = cells.where((c) => c.status == 'ready').toList()
       ..sort(
         (a, b) => (b.value('download_mbps', 'median') ?? 0).compareTo(
@@ -604,42 +669,45 @@ class _NetworkMapState extends State<NetworkMap> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: ListView(
-          padding: const EdgeInsets.all(22),
-          children: [
-            const Text(
-              'مقارنة الخلايا',
-              style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+      builder: (_) => ListView(
+        padding: const EdgeInsets.all(22),
+        children: [
+          Text(
+            l10n.compareCellsTitle,
+            style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Text(l10n.compareCellsSubtitle),
+          if (valid.length < 2)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(l10n.compareCellsInsufficient),
             ),
-            const SizedBox(height: 12),
-            const Text('نفس الفترة والفلاتر • ترتيب حسب وسيط التنزيل'),
-            if (valid.length < 2)
-              const Padding(
-                padding: EdgeInsets.all(20),
-                child: Text('لا توجد خليتان حديثتان بعينة كافية للمقارنة.'),
-              ),
-            for (final cell in valid)
-              ListTile(
-                title: Text(cell.id),
-                subtitle: Text(
-                  'تنزيل ${cell.value('download_mbps', 'median')} Mbps • رفع ${cell.value('upload_mbps', 'median')} Mbps • HTTP ${cell.value('ping_ms', 'median')} ms',
+          for (final cell in valid)
+            ListTile(
+              title: Text(cell.id),
+              subtitle: Text(
+                l10n.compareCellMetrics(
+                  '${cell.value('download_mbps', 'median')}',
+                  '${cell.value('upload_mbps', 'median')}',
+                  '${cell.value('ping_ms', 'median')}',
                 ),
-                trailing: Text('${cell.count} عينة'),
-                onTap: () {
-                  Navigator.pop(context);
-                  info(cell);
-                },
               ),
-          ],
-        ),
+              trailing: Text(l10n.sampleCount(cell.count ?? 0)),
+              onTap: () {
+                Navigator.pop(context);
+                info(cell);
+              },
+            ),
+        ],
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) => Stack(
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Stack(
     children: [
       FlutterMap(
         mapController: controller,
@@ -725,16 +793,16 @@ class _NetworkMapState extends State<NetworkMap> {
                   ),
               ],
             ),
-          const Align(
+          Align(
             alignment: Alignment.bottomLeft,
             child: ColoredBox(
-              color: Color(0xED121725),
+              color: const Color(0xED121725),
               child: Padding(
-                padding: EdgeInsets.all(4),
+                padding: const EdgeInsets.all(4),
                 child: Text(
-                  '© OpenStreetMap © CARTO',
+                  l10n.mapAttribution,
                   textDirection: TextDirection.ltr,
-                  style: TextStyle(fontSize: 8, color: Colors.white70),
+                  style: const TextStyle(fontSize: 8, color: Colors.white70),
                 ),
               ),
             ),
@@ -748,7 +816,7 @@ class _NetworkMapState extends State<NetworkMap> {
           children: [
             tool(
               Icons.add,
-              'تكبير',
+              l10n.zoomIn,
               () => controller.move(
                 controller.camera.center,
                 math.min(18, controller.camera.zoom + .7),
@@ -756,7 +824,7 @@ class _NetworkMapState extends State<NetworkMap> {
             ),
             tool(
               Icons.remove,
-              'تصغير',
+              l10n.zoomOut,
               () => controller.move(
                 controller.camera.center,
                 math.max(2, controller.camera.zoom - .7),
@@ -764,16 +832,16 @@ class _NetworkMapState extends State<NetworkMap> {
             ),
             tool(
               Icons.home_outlined,
-              'العودة لحائل',
+              l10n.backToHail,
               () {
                 controller.move(_city, 12.3);
                 refresh();
               },
             ),
-            tool(Icons.my_location, 'موقعي الحالي', locate),
+            tool(Icons.my_location, l10n.myCurrentLocation, locate),
             tool(
               dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-              'تبديل مظهر الخريطة',
+              l10n.toggleMapTheme,
               () => setState(() {
                 dark = !dark;
                 tilesFailed = false;
@@ -781,26 +849,26 @@ class _NetworkMapState extends State<NetworkMap> {
             ),
             tool(
               heat ? Icons.layers : Icons.layers_clear,
-              'إظهار أو إخفاء الحرارة',
+              l10n.toggleHeatmap,
               () => setState(() => heat = !heat),
             ),
             if (!widget.fullScreen)
               tool(
                 Icons.fullscreen,
-                'ملء الشاشة',
+                l10n.fullScreen,
                 () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
-                    builder: (_) => Directionality(
-                      textDirection: TextDirection.rtl,
-                      child: Scaffold(
-                        appBar: AppBar(
-                          title: const Text('خريطة جودة الإنترنت'),
+                    builder: (routeContext) => Scaffold(
+                      appBar: AppBar(
+                        title: Text(
+                          AppLocalizations.of(routeContext)
+                              .internetQualityMapTitle,
                         ),
-                        body: NetworkMap(
-                          selectedArea: widget.selectedArea,
-                          fullScreen: true,
-                        ),
+                      ),
+                      body: NetworkMap(
+                        selectedArea: widget.selectedArea,
+                        fullScreen: true,
                       ),
                     ),
                   ),
@@ -814,22 +882,19 @@ class _NetworkMapState extends State<NetworkMap> {
         top: 12,
         child: Column(
           children: [
-            tool(Icons.tune, 'فلاتر البيانات', editFilters),
-            tool(Icons.refresh, 'تحديث البيانات', refresh),
-            tool(Icons.speed, 'اختبار الإنترنت', () async {
+            tool(Icons.tune, l10n.tooltipFilters, editFilters),
+            tool(Icons.refresh, l10n.tooltipRefresh, refresh),
+            tool(Icons.speed, l10n.tooltipSpeedTest, () async {
               await Navigator.push(
                 context,
                 MaterialPageRoute<void>(
-                  builder: (_) => const Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: NetworkTestScreen(),
-                  ),
+                  builder: (_) => const NetworkTestScreen(),
                 ),
               );
               if (mounted) refresh();
             }),
-            tool(Icons.compare_arrows, 'مقارنة المناطق', compare),
-            tool(Icons.palette_outlined, 'دليل الألوان', legend),
+            tool(Icons.compare_arrows, l10n.tooltipCompare, compare),
+            tool(Icons.palette_outlined, l10n.tooltipLegend, legend),
           ],
         ),
       ),
@@ -858,12 +923,12 @@ class _NetworkMapState extends State<NetworkMap> {
                 children: [
                   Text(
                     error != null
-                        ? 'الخدمة غير متاحة'
+                        ? l10n.mapBannerError
                         : mine.isNotEmpty
-                        ? '${mine.length} قياس لك على الخريطة${cells.isEmpty ? '' : ' • ${cells.length} خلية منشورة'}'
+                        ? l10n.mapBannerMine(mine.length, cells.length)
                         : cells.isEmpty
-                        ? 'لا توجد بيانات منشورة كافية'
-                        : '${cells.length} خلية مجمّعة',
+                        ? l10n.mapBannerEmpty
+                        : l10n.mapBannerPublic(cells.length),
                     style: TextStyle(
                       fontSize: 12,
                       color: error == null ? _mint : Colors.orangeAccent,
@@ -871,12 +936,20 @@ class _NetworkMapState extends State<NetworkMap> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${{'download': 'التنزيل', 'upload': 'الرفع', 'ping': 'استجابة HTTP', 'density': 'كثافة القياسات'}[filters.metric]} • ${filters.minSamples}+ عينات • ${filters.connection == 'all' ? 'كل الاتصالات' : {'wifi': 'واي فاي', 'cellular': 'خلوي', 'ethernet': 'سلكي', 'unknown': 'غير معروف'}[filters.connection]}',
+                    l10n.mapBannerFilterSummary(
+                      _metricLabel(l10n, filters.metric),
+                      filters.minSamples,
+                      _connectionLabel(l10n, filters.connection),
+                    ),
                     style: const TextStyle(color: Colors.white54, fontSize: 10),
                   ),
                   if (refreshed != null)
                     Text(
-                      'تحديث ${refreshed!.hour.toString().padLeft(2, '0')}:${refreshed!.minute.toString().padLeft(2, '0')} • ${(filters.end.difference(filters.start).inHours / 24).ceil()} يوم',
+                      l10n.mapBannerUpdated(
+                        '${refreshed!.hour.toString().padLeft(2, '0')}:${refreshed!.minute.toString().padLeft(2, '0')}',
+                        (filters.end.difference(filters.start).inHours / 24)
+                            .ceil(),
+                      ),
                       style: const TextStyle(
                         fontSize: 10,
                         color: Colors.white38,
@@ -884,21 +957,27 @@ class _NetworkMapState extends State<NetworkMap> {
                     ),
                   if (filters.minDownload > 0 || filters.maxPing < 10000)
                     Text(
-                      'تنزيل ≥ ${filters.minDownload} Mbps • استجابة ≤ ${filters.maxPing} ms',
+                      l10n.mapBannerThresholds(
+                        filters.minDownload,
+                        filters.maxPing,
+                      ),
                       style: const TextStyle(
                         fontSize: 10,
                         color: Colors.white54,
                       ),
                     ),
                   if (!heat)
-                    const Text(
-                      'الحرارة مخفية',
-                      style: TextStyle(fontSize: 10, color: Colors.white38),
+                    Text(
+                      l10n.heatmapHidden,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white38,
+                      ),
                     ),
                   if (tilesFailed)
-                    const Text(
-                      'تعذر تحميل بعض أجزاء الخريطة',
-                      style: TextStyle(
+                    Text(
+                      l10n.mapTilesFailed,
+                      style: const TextStyle(
                         fontSize: 10,
                         color: Colors.orangeAccent,
                       ),
@@ -910,5 +989,6 @@ class _NetworkMapState extends State<NetworkMap> {
         ),
       ),
     ],
-  );
+    );
+  }
 }
