@@ -400,6 +400,39 @@ EN: dict[str, str] = {
     'سجّل الدخول لتشغيل فحص السرعة.': 'Sign in to run a speed test.',
     'سجّل الدخول لاستخدام التحليل الذكي.': 'Sign in to use smart analysis.',
     'تحليل نتيجة الفحص': 'Speed-test analysis',
+    'عرض التحليل الكامل': 'View full analysis',
+    'تحليل ذكي': 'Smart analysis',
+    'نتيجة التحليل': 'Analysis result',
+    'تم': 'Done',
+    'تحليل فحص السرعة': 'Speed-test analysis',
+    'تقرير ذكي مبني على قياسك الحقيقي عبر الخادم':
+        'A smart report based on your real server-side measurement',
+    'بعد الفحص': 'After the test',
+    'اكتمل التحليل': 'Analysis complete',
+    'تعذر التحليل': 'Analysis failed',
+    'نجهّز تقريرًا مرتبًا من نتيجة فحصك': 'Preparing a clear report from your test result',
+    'تعذر التحليل الذكي': 'Smart analysis failed',
+    'ملاحظة': 'Note',
+    'التقييم العام': 'Overall rating',
+    'الاستخدام اليومي': 'Daily use',
+    'التشخيص المحتمل': 'Likely diagnosis',
+    'نصيحة عملية': 'Practical tip',
+    'حكم واضح: ممتاز أو جيد أو متوسط أو ضعيف، مع جملة واحدة.':
+        'A clear rating: excellent, good, fair, or weak, plus one sentence.',
+    'كيف تناسب النتيجة التصفح / المكالمات / الفيديو / الألعاب.':
+        'How the result fits browsing / calls / video / gaming.',
+    'هل الأرجح الشبكة أم الجهاز أم الموقع؟ بجمل قصيرة.':
+        'Is it more likely the network, the device, or the location? In short lines.',
+    'نصيحة واحدة واضحة يمكن تنفيذها الآن.': 'One clear tip you can apply now.',
+    'اكتب بالعربية فقط وبهذا الشكل حرفيًا (عناوين ## ثم نقاط قصيرة):':
+        'Write in Arabic only, exactly in this shape (## headings then short bullets):',
+    'التحليل الذكي': 'Smart analysis',
+    'قراءة وصفية لمشكلتك عبر Gemini على الخادم':
+        'A descriptive read of your issue via Gemini on the server',
+    'تحليل مخصص': 'Custom analysis',
+    'ملخص المشكلة': 'Problem summary',
+    'الأسباب المحتملة': 'Likely causes',
+    'خطوات مقترحة': 'Suggested steps',
     'تشخيص الموقع وفحص السرعة والتحليل الذكي في صفحة واحدة. القياس يُحفظ ويمكن رسمه على الخريطة إن سمحت بالموقع.':
         'Location diagnosis, speed test, and smart analysis on one page. Results are saved and can be drawn on the map if you allow location.',
 

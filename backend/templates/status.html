@@ -72,8 +72,7 @@
         <span id="complaintStatus" class="muted" role="status"></span>
       </div>
       <div id="speedAiBox" hidden style="margin-top:1rem">
-        <h3 class="section-title">{{ _('تحليل نتيجة الفحص') }}</h3>
-        <pre id="speedAiOut" class="box" aria-live="polite"></pre>
+        <button type="button" class="ghost" id="btnReopenSpeedAi" hidden>{{ _('عرض التحليل الكامل') }}</button>
       </div>
     {% endif %}
   </div>
@@ -97,10 +96,26 @@
         </div>
       </form>
       <div id="aiMsg" class="alert" hidden role="alert"></div>
-      <pre id="aiOut" class="box" aria-live="polite"></pre>
     {% endif %}
   </div>
 </section>
+
+<div class="ai-modal" id="aiModal" hidden>
+  <div class="ai-modal-card" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle">
+    <button type="button" class="ai-modal-close" id="aiModalClose" aria-label="{{ _('إغلاق') }}">×</button>
+    <header class="ai-modal-hero">
+      <div class="ai-modal-hero-glow" aria-hidden="true"></div>
+      <span class="ai-modal-badge" id="aiModalBadge">{{ _('تحليل ذكي') }}</span>
+      <h2 id="aiModalTitle">{{ _('نتيجة التحليل') }}</h2>
+      <p class="ai-modal-sub" id="aiModalSub"></p>
+      <div class="ai-modal-kpis" id="aiModalKpis" hidden></div>
+    </header>
+    <div class="ai-modal-body" id="aiModalBody" aria-live="polite"></div>
+    <footer class="ai-modal-foot">
+      <button type="button" class="primary" id="aiModalDone">{{ _('تم') }}</button>
+    </footer>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -112,6 +127,146 @@ const headers = TOKEN
   ? {'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json'}
   : {'Content-Type': 'application/json'};
 let lastStatus = null;
+let lastAiPayload = null;
+
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function toneForDl(v) {
+  if (v >= 50) return 'ok';
+  if (v >= 20) return 'mid';
+  if (v >= 8) return 'warn';
+  return 'bad';
+}
+function toneForUl(v) {
+  if (v >= 20) return 'ok';
+  if (v >= 8) return 'mid';
+  if (v >= 3) return 'warn';
+  return 'bad';
+}
+function toneForPing(v) {
+  if (v <= 40) return 'ok';
+  if (v <= 80) return 'mid';
+  if (v <= 140) return 'warn';
+  return 'bad';
+}
+
+function enrichInline(html) {
+  return html
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/(\d+(?:\.\d+)?)\s*(Mbps|mbps|ميجا|ميغابت)/gi, '<em class="ai-num ai-num-speed">$1 $2</em>')
+    .replace(/(\d+(?:\.\d+)?)\s*(ms|مللي|ملّي)/gi, '<em class="ai-num ai-num-ping">$1 $2</em>')
+    .replace(/(ممتاز|excellent)/gi, '<span class="ai-tag ok">$1</span>')
+    .replace(/(جيد|good)/gi, '<span class="ai-tag mid">$1</span>')
+    .replace(/(متوسط|fair|moderate)/gi, '<span class="ai-tag warn">$1</span>')
+    .replace(/(ضعيف|سيئ|poor|weak|bad)/gi, '<span class="ai-tag bad">$1</span>');
+}
+
+function formatAnalysisHtml(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return '<p class="ai-empty">' + escHtml(T('لا توجد نتيجة')) + '</p>';
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const blocks = [];
+  let cur = { title: '', lines: [] };
+  const flush = () => {
+    if (!cur.title && !cur.lines.length) return;
+    blocks.push(cur);
+    cur = { title: '', lines: [] };
+  };
+  lines.forEach((line) => {
+    const h = line.match(/^\s{0,3}#{1,3}\s+(.+)$/) || line.match(/^\s*(?:#{1,3}\s*)?([^\n:]{2,40})\s*:\s*$/);
+    const boldH = line.match(/^\s*\*\*([^*]+)\*\*\s*:?\s*$/);
+    if (h || boldH) {
+      flush();
+      cur.title = ((h && h[1]) || (boldH && boldH[1]) || '').replace(/[:：]+$/, '').trim();
+      return;
+    }
+    cur.lines.push(line);
+  });
+  flush();
+  if (blocks.length === 1 && !blocks[0].title) {
+    const paras = blocks[0].lines.join('\n').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+    return paras.map((p) => {
+      if (/^\s*[-*•]/.test(p) || p.split('\n').every((l) => /^\s*([-*\d.•]|）|\))/.test(l) || !l.trim())) {
+        const items = p.split('\n').map((l) => l.replace(/^\s*[-*•]\s*/, '').replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean);
+        return '<ul class="ai-list">' + items.map((i) => '<li>' + enrichInline(escHtml(i)) + '</li>').join('') + '</ul>';
+      }
+      return '<p class="ai-p">' + enrichInline(escHtml(p).replace(/\n/g, '<br>')) + '</p>';
+    }).join('');
+  }
+  const palette = ['tone-a', 'tone-b', 'tone-c', 'tone-d'];
+  return blocks.map((b, idx) => {
+    const bodyLines = b.lines.map((l) => l.trim()).filter(Boolean);
+    let body = '';
+    if (!bodyLines.length) body = '';
+    else if (bodyLines.every((l) => /^[-*•]/.test(l) || /^\d+[.)]/.test(l))) {
+      body = '<ul class="ai-list">' + bodyLines.map((l) => {
+        const t = l.replace(/^[-*•]\s*/, '').replace(/^\d+[.)]\s*/, '');
+        return '<li>' + enrichInline(escHtml(t)) + '</li>';
+      }).join('') + '</ul>';
+    } else {
+      body = '<p class="ai-p">' + enrichInline(escHtml(bodyLines.join('\n')).replace(/\n/g, '<br>')) + '</p>';
+    }
+    const title = b.title || T('ملاحظة');
+    return `<article class="ai-sec ${palette[idx % palette.length]}">
+      <h3><span class="ai-sec-dot" aria-hidden="true"></span>${escHtml(title)}</h3>
+      ${body}
+    </article>`;
+  }).join('');
+}
+
+function openAiModal(opts) {
+  const modal = document.getElementById('aiModal');
+  const title = document.getElementById('aiModalTitle');
+  const sub = document.getElementById('aiModalSub');
+  const badge = document.getElementById('aiModalBadge');
+  const kpis = document.getElementById('aiModalKpis');
+  const body = document.getElementById('aiModalBody');
+  lastAiPayload = opts || {};
+  title.textContent = opts.title || T('نتيجة التحليل');
+  sub.textContent = opts.sub || '';
+  badge.textContent = opts.badge || T('تحليل ذكي');
+  if (opts.metrics) {
+    const m = opts.metrics;
+    kpis.hidden = false;
+    kpis.innerHTML = `
+      <div class="ai-kpi ${toneForDl(m.download)}"><b>${m.download.toFixed(1)}</b><span>${T('تحميل Mbps')}</span></div>
+      <div class="ai-kpi ${toneForUl(m.upload)}"><b>${m.upload.toFixed(1)}</b><span>${T('رفع Mbps')}</span></div>
+      <div class="ai-kpi ${toneForPing(m.ping)}"><b>${m.ping.toFixed(0)}</b><span>${T('بنق ms')}</span></div>`;
+  } else {
+    kpis.hidden = true;
+    kpis.innerHTML = '';
+  }
+  if (opts.loading) {
+    body.innerHTML = `<div class="ai-loading"><span class="spinner" aria-hidden="true"></span><p>${escHtml(T('جارٍ التحليل الذكي…'))}</p><small>${escHtml(T('نجهّز تقريرًا مرتبًا من نتيجة فحصك'))}</small></div>`;
+  } else if (opts.error) {
+    body.innerHTML = `<div class="ai-error"><strong>${escHtml(T('تعذر التحليل الذكي'))}</strong><p>${escHtml(opts.error)}</p></div>`;
+  } else {
+    body.innerHTML = formatAnalysisHtml(opts.analysis);
+  }
+  modal.hidden = false;
+  document.body.classList.add('ai-modal-open');
+  document.getElementById('aiModalDone').focus();
+}
+
+function closeAiModal() {
+  const modal = document.getElementById('aiModal');
+  modal.hidden = true;
+  document.body.classList.remove('ai-modal-open');
+}
+
+document.getElementById('aiModalClose').onclick = closeAiModal;
+document.getElementById('aiModalDone').onclick = closeAiModal;
+document.getElementById('aiModal').addEventListener('click', (e) => {
+  if (e.target.id === 'aiModal') closeAiModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !document.getElementById('aiModal').hidden) closeAiModal();
+});
 
 const VERDICT_UI = {
   network_issue: { label: T('مشكلة شبكة'), cls: 'bad' },
@@ -290,7 +445,7 @@ document.getElementById('runSpeed').onclick = async () => {
   const metrics = document.getElementById('metrics');
   const saveInfo = document.getElementById('saveInfo');
   const aiBox = document.getElementById('speedAiBox');
-  const aiOut = document.getElementById('speedAiOut');
+  const reopenAi = document.getElementById('btnReopenSpeedAi');
   const wantShare = document.getElementById('shareLoc').checked;
   if (btn.disabled) return;
   btn.disabled = true;
@@ -298,7 +453,7 @@ document.getElementById('runSpeed').onclick = async () => {
   status.textContent = T('بدء الجلسة…');
   saveInfo.hidden = true;
   aiBox.hidden = true;
-  aiOut.textContent = '';
+  if (reopenAi) reopenAi.hidden = true;
   try {
     let loc = null;
     if (wantShare) {
@@ -456,8 +611,15 @@ document.getElementById('runSpeed').onclick = async () => {
     };
 
     status.textContent = (status.textContent || '') + ' • ' + T('جارٍ التحليل الذكي…');
+    const metricPack = { download, upload, ping };
+    openAiModal({
+      title: T('تحليل فحص السرعة'),
+      sub: T('تقرير ذكي مبني على قياسك الحقيقي عبر الخادم'),
+      badge: T('بعد الفحص'),
+      metrics: metricPack,
+      loading: true,
+    });
     aiBox.hidden = false;
-    aiOut.textContent = T('جارٍ التحليل…');
     try {
       const prompt =
         T('حلّل نتيجة فحص سرعة شبكة للمستخدم في حائل/الموقع الحالي:') + '\n' +
@@ -467,19 +629,42 @@ document.getElementById('runSpeed').onclick = async () => {
         (saved.shared
           ? T('- رُسم على خلية: {cell}', {cell: saved.cell_id}) + '\n'
           : T('- لم تُشارك إحداثيات على الخريطة') + '\n') +
-        T('اذكر تقييمًا مختصرًا وجودة الاستخدام اليومي ونصيحة واحدة عملية.');
+        T('اكتب بالعربية فقط وبهذا الشكل حرفيًا (عناوين ## ثم نقاط قصيرة):') + '\n' +
+        '## ' + T('التقييم العام') + '\n' +
+        T('حكم واضح: ممتاز أو جيد أو متوسط أو ضعيف، مع جملة واحدة.') + '\n' +
+        '## ' + T('الاستخدام اليومي') + '\n' +
+        T('كيف تناسب النتيجة التصفح / المكالمات / الفيديو / الألعاب.') + '\n' +
+        '## ' + T('التشخيص المحتمل') + '\n' +
+        T('هل الأرجح الشبكة أم الجهاز أم الموقع؟ بجمل قصيرة.') + '\n' +
+        '## ' + T('نصيحة عملية') + '\n' +
+        T('نصيحة واحدة واضحة يمكن تنفيذها الآن.');
       const ai = await speedApi('/api/ai/analyze', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({text: prompt})
       });
-      aiOut.textContent = ai.analysis || T('لا توجد نتيجة');
+      openAiModal({
+        title: T('تحليل فحص السرعة'),
+        sub: T('تقرير ذكي مبني على قياسك الحقيقي عبر الخادم'),
+        badge: T('اكتمل التحليل'),
+        metrics: metricPack,
+        analysis: ai.analysis || T('لا توجد نتيجة'),
+      });
+      if (reopenAi) {
+        reopenAi.hidden = false;
+        reopenAi.onclick = () => openAiModal(lastAiPayload);
+      }
       status.textContent = saved.shared
         ? T('اكتمل: حفظ + خريطة + تحليل ذكي')
         : T('اكتمل: حفظ + تحليل ذكي');
     } catch (aiErr) {
-      aiOut.textContent = T('تعذر التحليل الذكي: ') + (aiErr.message || aiErr) +
-        '\n' + T('(تأكد أن المدير حفظ مفتاح Gemini في لوحة الإدارة)');
+      openAiModal({
+        title: T('تحليل فحص السرعة'),
+        sub: T('تقرير ذكي مبني على قياسك الحقيقي عبر الخادم'),
+        badge: T('تعذر التحليل'),
+        metrics: metricPack,
+        error: (aiErr.message || String(aiErr)) + ' — ' + T('(تأكد أن المدير حفظ مفتاح Gemini في لوحة الإدارة)'),
+      });
     }
   } catch (e) {
     status.textContent = e.message || String(e);
@@ -495,7 +680,6 @@ document.getElementById('runAi').onclick = async () => {
   const btn = document.getElementById('runAi');
   const text = document.getElementById('aiText').value.trim();
   const msg = document.getElementById('aiMsg');
-  const out = document.getElementById('aiOut');
   msg.hidden = true;
   if (text.length < 3) {
     msg.hidden = false;
@@ -505,21 +689,38 @@ document.getElementById('runAi').onclick = async () => {
   if (btn.disabled) return;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> ' + T('جارٍ التحليل…');
-  out.textContent = T('جارٍ التحليل…');
+  openAiModal({
+    title: T('التحليل الذكي'),
+    sub: T('قراءة وصفية لمشكلتك عبر Gemini على الخادم'),
+    badge: T('تحليل مخصص'),
+    loading: true,
+  });
   try {
+    const structured =
+      text + '\n\n' +
+      T('اكتب بالعربية فقط وبهذا الشكل حرفيًا (عناوين ## ثم نقاط قصيرة):') + '\n' +
+      '## ' + T('ملخص المشكلة') + '\n' +
+      '## ' + T('الأسباب المحتملة') + '\n' +
+      '## ' + T('خطوات مقترحة') + '\n' +
+      '## ' + T('نصيحة عملية');
     const res = await fetch('/api/ai/analyze', {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + TOKEN,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({text})
+      body: JSON.stringify({text: structured})
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || T('فشل التحليل'));
-    out.textContent = data.analysis || '';
+    openAiModal({
+      title: T('التحليل الذكي'),
+      sub: T('قراءة وصفية لمشكلتك عبر Gemini على الخادم'),
+      badge: T('اكتمل التحليل'),
+      analysis: data.analysis || T('لا توجد نتيجة'),
+    });
   } catch (e) {
-    out.textContent = '';
+    closeAiModal();
     msg.hidden = false;
     msg.textContent = e.message || String(e);
   } finally {
