@@ -121,6 +121,7 @@
 <script>
 const TOKEN = {{ token|tojson }};
 const LOGGED_IN = {{ logged_in|tojson }};
+const AI_AVAILABLE = {{ ai_available|tojson }};
 const LIMITS = {{ limits|tojson }};
 const MIB = 1024 * 1024;
 const headers = TOKEN
@@ -356,6 +357,97 @@ async function runStatus(coords) {
   line.textContent = T('تم التحليل');
 }
 
+function localStatusAnalysis(data) {
+  const ui = VERDICT_UI[data.verdict] || VERDICT_UI.unclear;
+  const loc = data.location || {};
+  const area = data.area || {};
+  const steps = (data.diagnostics || []).map((s) => '- ' + s).join('\n');
+  return (
+    '## ' + T('التقييم العام') + '\n' +
+    '**' + ui.label + '** — ' + (data.headline || '') + '\n\n' +
+    '## ' + T('ملخص المشكلة') + '\n' +
+    (data.detail || T('لا توجد نتيجة')) + '\n\n' +
+    '## ' + T('الاستخدام اليومي') + '\n' +
+    T('القطاع') + ': ' + (loc.sector || '—') + '\n' +
+    T('خلية') + ': ' + (loc.cell_id || '—') + '\n' +
+    T('عينات الحي') + ': ' + (area.samples_7d ?? 0) + '\n' +
+    (area.avg_download_mbps != null ? ('↓ ' + area.avg_download_mbps + ' Mbps\n') : '') +
+    (area.avg_ping_ms != null ? ('ping ' + area.avg_ping_ms + ' ms\n') : '') +
+    '\n## ' + T('الخطوات') + '\n' +
+    (steps || '- —') +
+    (data.work_status ? ('\n\n## ' + T('حالة العمل') + '\n' + data.work_status) : '')
+  );
+}
+
+async function analyzeStatusWithAi(data) {
+  const base = {
+    title: T('تحليل فحص الشبكة'),
+    sub: T('تقرير ذكي بعد تشخيص موقعك'),
+    badge: T('بعد فحص الموقع'),
+  };
+  const metrics = (data.area && data.area.avg_download_mbps != null)
+    ? {
+        download: Number(data.area.avg_download_mbps) || 0,
+        upload: Number(data.area.avg_upload_mbps) || 0,
+        ping: Number(data.area.avg_ping_ms) || 0,
+      }
+    : null;
+  openAiModal(Object.assign({}, base, { metrics, loading: true }));
+  const localText = localStatusAnalysis(data);
+  if (!(LOGGED_IN && AI_AVAILABLE && TOKEN)) {
+    openAiModal(Object.assign({}, base, {
+      metrics,
+      analysis: localText + '\n\n## ' + T('نصيحة عملية') + '\n' +
+        T('سجّل الدخول ثم فعّل Gemini من الإدارة لتوسيع التحليل الذكي.'),
+    }));
+    return;
+  }
+  try {
+    const ui = VERDICT_UI[data.verdict] || VERDICT_UI.unclear;
+    const loc = data.location || {};
+    const area = data.area || {};
+    const prompt =
+      T('حلّل نتيجة فحص شبكة لموقع المستخدم في حائل:') + '\n' +
+      T('التقييم العام') + ': ' + ui.label + '\n' +
+      (data.headline || '') + '\n' +
+      (data.detail || '') + '\n' +
+      T('القطاع') + ': ' + (loc.sector || '—') + '\n' +
+      T('خلية') + ': ' + (loc.cell_id || '—') + '\n' +
+      T('عينات الحي') + ': ' + (area.samples_7d ?? 0) + '\n' +
+      (area.avg_download_mbps != null ? (T('تحميل Mbps') + ': ' + area.avg_download_mbps + '\n') : '') +
+      (area.avg_ping_ms != null ? (T('بنق ms') + ': ' + area.avg_ping_ms + '\n') : '') +
+      (data.work_status ? (T('حالة العمل') + ': ' + data.work_status + '\n') : '') +
+      T('الخطوات') + ':\n' + (data.diagnostics || []).map((s) => '- ' + s).join('\n') + '\n\n' +
+      T('اكتب بالعربية فقط وبهذا الشكل حرفيًا (عناوين ## ثم نقاط قصيرة):') + '\n' +
+      '## ' + T('التقييم العام') + '\n' +
+      '## ' + T('التشخيص المحتمل') + '\n' +
+      '## ' + T('الاستخدام اليومي') + '\n' +
+      '## ' + T('نصيحة عملية');
+    const res = await fetch('/api/ai/analyze', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: prompt }),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.detail || T('فشل التحليل'));
+    openAiModal(Object.assign({}, base, {
+      metrics,
+      badge: T('اكتمل التحليل'),
+      analysis: out.analysis || localText,
+    }));
+  } catch (err) {
+    openAiModal(Object.assign({}, base, {
+      metrics,
+      badge: T('اكتمل التحليل'),
+      analysis: localText + '\n\n## ' + T('نصيحة عملية') + '\n' +
+        (err.message || String(err)),
+    }));
+  }
+}
+
 document.getElementById('btnCheckStatus').onclick = async () => {
   const btn = document.getElementById('btnCheckStatus');
   btn.disabled = true;
@@ -363,6 +455,9 @@ document.getElementById('btnCheckStatus').onclick = async () => {
   try {
     const coords = await getPosition();
     await runStatus(coords);
+    document.getElementById('statusLine').textContent = T('تم التحليل') + ' • ' + T('جارٍ التحليل الذكي…');
+    await analyzeStatusWithAi(lastStatus);
+    document.getElementById('statusLine').textContent = T('تم التحليل');
   } catch (e) {
     document.getElementById('statusLine').textContent = e.message || String(e);
   } finally {

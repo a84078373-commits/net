@@ -433,6 +433,15 @@ EN: dict[str, str] = {
     'ملخص المشكلة': 'Problem summary',
     'الأسباب المحتملة': 'Likely causes',
     'خطوات مقترحة': 'Suggested steps',
+    'تحليل فحص الشبكة': 'Network check analysis',
+    'تقرير ذكي بعد تشخيص موقعك': 'A smart report after diagnosing your location',
+    'بعد فحص الموقع': 'After location check',
+    'سجّل الدخول ثم فعّل Gemini من الإدارة لتوسيع التحليل الذكي.':
+        'Sign in, then enable Gemini from admin to expand the smart analysis.',
+    'الخطوات': 'Steps',
+    'حالة العمل': 'Work status',
+    'حلّل نتيجة فحص شبكة لموقع المستخدم في حائل:':
+        'Analyze this user network-status check in Hail:',
     'تشخيص الموقع وفحص السرعة والتحليل الذكي في صفحة واحدة. القياس يُحفظ ويمكن رسمه على الخريطة إن سمحت بالموقع.':
         'Location diagnosis, speed test, and smart analysis on one page. Results are saved and can be drawn on the map if you allow location.',
 
