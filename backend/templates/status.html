@@ -32,7 +32,7 @@
       <div class="status-actions row">
         <button type="button" class="primary" id="btnSubscribe" hidden>{{ _('اشترك بتنبيه هذا الحي') }}</button>
         <button type="button" class="ghost" id="btnUnsubscribe" hidden>{{ _('إلغاء الاشتراك') }}</button>
-        <a class="ghost" href="{{ url_for('web_map') }}?focus=radar">{{ _('عرض الرادار') }}</a>
+        {% if is_admin %}<a class="ghost" href="{{ url_for('web_map') }}?focus=radar">{{ _('عرض الرادار') }}</a>{% endif %}
       </div>
       <p id="subStatus" class="muted" role="status"></p>
       <div class="status-steps">

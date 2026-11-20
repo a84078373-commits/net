@@ -59,12 +59,12 @@
   </div>
 
   <div class="feature-trio" aria-label="{{ _('قدرات المنصة') }}">
+    {% if is_admin %}
     <a class="feature-card" href="{{ url_for('web_radar') }}">
       <span class="feature-role">{{ _('للفني') }}</span>
       <strong>{{ _('رادار الأعطال الاستباقي') }}</strong>
       <span>{{ _('إنذار مبكر وترتيب الأحياء حسب الأولوية.') }}</span>
     </a>
-    {% if is_admin %}
     <a class="feature-card" href="{{ url_for('web_twin') }}">
       <span class="feature-role">{{ _('للمدير') }}</span>
       <strong>{{ _('التوأم الرقمي للشبكة') }}</strong>
@@ -84,6 +84,7 @@
     </a>
   </div>
 
+  {% if is_admin %}
   <section class="card radar-board" id="radarBoard" aria-labelledby="radarTitle">
     <div class="card-head">
       <div>
@@ -107,6 +108,7 @@
       </div>
     </div>
   </section>
+  {% endif %}
 
   <div class="dash-bottom">
     <section class="card">
@@ -399,12 +401,13 @@ async function loadDashboard() {
       });
     }
 
-    // Predictive outage radar board
+    // Predictive outage radar board (admin only)
     try {
+      const empty = document.getElementById('radarEmpty');
+      if (!empty) throw new Error('skip-radar');
       const radarBbox = BOUNDS.join(',');
       const radar = await fetch('/api/outage-radar?bbox=' + encodeURIComponent(radarBbox)).then((r) => r.json());
       const queue = radar.priority_queue || [];
-      const empty = document.getElementById('radarEmpty');
       const list = document.getElementById('radarPriority');
       const chips = document.getElementById('radarSummaryChips');
       const sum = radar.summary || {};

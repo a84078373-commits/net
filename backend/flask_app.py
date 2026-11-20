@@ -1840,6 +1840,7 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     @app.get('/api/outage-radar')
     def outage_radar():
+        require_admin(current_user())
         bbox = None
         raw = request.args.get('bbox')
         if raw:
@@ -2927,11 +2928,15 @@ def create_app(settings: Settings | None = None) -> Flask:
     @app.get('/radar')
     def web_radar():
         user = current_user(required=False)
+        if not user:
+            return redirect(url_for('web_login', next=url_for('web_radar')))
+        if not user.get('is_admin'):
+            return render_template('admin_denied.html'), 403
         return render_template(
             'radar.html',
             bounds=QUALITY['bounds'],
             colors=QUALITY['colors'],
-            token=(user or {}).get('_token'),
+            token=user['_token'],
         )
 
     @app.get('/twin')

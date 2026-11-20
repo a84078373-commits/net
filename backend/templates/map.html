@@ -43,7 +43,7 @@
     </div>
     <div class="heat-group heat-toggles">
       <label class="toggle-chip"><input type="checkbox" id="togHeat" checked> {{ _('توهج حراري') }}</label>
-      <label class="toggle-chip"><input type="checkbox" id="togRadar" checked> {{ _('رادار الأعطال') }}</label>
+      {% if is_admin %}<label class="toggle-chip"><input type="checkbox" id="togRadar" checked> {{ _('رادار الأعطال') }}</label>{% endif %}
       <label class="toggle-chip"><input type="checkbox" id="togCells"> {{ _('خلايا') }}</label>
       <label class="toggle-chip"><input type="checkbox" id="togMine" checked> {{ _('قياساتي') }}</label>
       <label class="toggle-chip"><input type="checkbox" id="togDark" checked> {{ _('خلفية داكنة') }}</label>
@@ -330,11 +330,11 @@ function levelLabel(level) {
 function renderRadar() {
   radarLayer.clearLayers();
   const panel = document.getElementById('radarAlerts');
-  const show = document.getElementById('togRadar').checked;
+  const tog = document.getElementById('togRadar');
+  const show = !!(tog && tog.checked);
   const alerts = (lastRadar.alerts || []).filter((a) => a.level !== 'info');
   if (!show || !alerts.length) {
-    panel.hidden = true;
-    panel.innerHTML = '';
+    if (panel) { panel.hidden = true; panel.innerHTML = ''; }
     return;
   }
   alerts.slice(0, 12).forEach((alert) => {
@@ -434,7 +434,8 @@ function renderLayers() {
   });
 
   // Fold radar risk into the heat so alert zones glow hotter.
-  if (document.getElementById('togRadar').checked) {
+  const togRadarHeat = document.getElementById('togRadar');
+  if (togRadarHeat && togRadarHeat.checked) {
     (lastRadar.alerts || []).forEach((alert) => {
       if (alert.level === 'info') return;
       heatPts.push(...expandCellHeat({
@@ -475,9 +476,11 @@ function loadCells() {
   const mineP = TOKEN
     ? fetch('/api/network-heatmap/mine', { headers }).then((r) => (r.ok ? r.json() : { cells: [] })).catch(() => ({ cells: [] }))
     : Promise.resolve({ cells: [] });
-  const radarP = fetch('/api/outage-radar?bbox=' + encodeURIComponent(bbox), { headers })
-    .then((r) => (r.ok ? r.json() : { alerts: [] }))
-    .catch(() => ({ alerts: [] }));
+  const radarP = document.getElementById('togRadar')
+    ? fetch('/api/outage-radar?bbox=' + encodeURIComponent(bbox), { headers })
+        .then((r) => (r.ok ? r.json() : { alerts: [] }))
+        .catch(() => ({ alerts: [] }))
+    : Promise.resolve({ alerts: [] });
 
   Promise.all([publicP, mineP, radarP]).then(([data, mine, radar]) => {
     lastPublic = data.cells || [];
@@ -488,8 +491,9 @@ function loadCells() {
       || location.hash === '#mine';
     const focusRadar = new URLSearchParams(location.search).get('focus') === 'radar'
       || location.hash === '#radar';
-    if (focusRadar && (lastRadar.alerts || []).length) {
-      document.getElementById('togRadar').checked = true;
+    const togRadar = document.getElementById('togRadar');
+    if (focusRadar && togRadar && (lastRadar.alerts || []).length) {
+      togRadar.checked = true;
       const a = lastRadar.alerts[0];
       const bb = a.bounds;
       map.fitBounds([[bb[1], bb[0]], [bb[3], bb[2]]], { padding: [48, 48], maxZoom: 14 });
@@ -535,7 +539,8 @@ loadCells();
   });
 });
 ['togHeat', 'togRadar', 'togCells', 'togMine'].forEach((id) => {
-  document.getElementById(id).addEventListener('change', renderLayers);
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', renderLayers);
 });
 document.getElementById('togDark').addEventListener('change', (e) => {
   map.removeLayer(baseLayer);
