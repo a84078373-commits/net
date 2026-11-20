@@ -2384,7 +2384,14 @@ body.auth-layout {
   color: #8a8392;
   font: 13px Arial, sans-serif;
 }
-.stc-card .phone-field { position: relative; margin-bottom: 16px; }
+.stc-card .phone-field {
+  position: relative;
+  margin-bottom: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
 .stc-card .field-label {
   position: absolute;
   width: 1px;
@@ -2397,7 +2404,16 @@ body.auth-layout {
   border: 0;
 }
 .stc-card .phone-hint { display: none; }
+.stc-card .dial-anchor {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
 .stc-card .phone-with-dial {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   height: 48px;
   background: #f7f4fb;
   border: 1.5px solid transparent;
@@ -2408,7 +2424,14 @@ body.auth-layout {
   background: transparent;
   color: #1f1b24;
   border-inline-end: 1px solid #e6e0ec;
+  min-width: 0;
   min-height: 48px;
+  padding: 0 0.55rem;
+  gap: 0.25rem;
+}
+.stc-card .stc-field input,
+.stc-card .phone-with-dial input {
+  text-align: start;
 }
 .stc-card .country-pop { max-height: 220px; }
 .stc-card .country-list { max-height: 150px; }

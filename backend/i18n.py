@@ -276,7 +276,7 @@ EN: dict[str, str] = {
     'اكتب نص التحليل أولًا (مثال: ضعف التحميل في حي النقرة)': 'Write the analysis text first (e.g. slow downloads in Al-Naqrah)',
     'غير مصرح': 'Not authorized',
     'لوحة المدير للمسؤولين فقط': 'The admin panel is for administrators only',
-    'سجّل الدخول بحساب المدير 0552515874.': 'Log in with the admin account 0552515874.',
+    'سجّل الدخول بحساب المدير 0530569197.': 'Log in with the admin account 0530569197.',
     'تسجيل دخول المدير': 'Admin login',
 
     # Server messages
@@ -588,7 +588,7 @@ EN: dict[str, str] = {
     'انتهت مهلة المحاكاة — أعد المحاولة': 'Simulation timed out — try again',
     'حساب تجريبي': 'Demo account',
     'للتجربة السريعة على بيانات حائل التجريبية:': 'For a quick trial on Hail demo data:',
-    'أو حساب المدير: 0552515874 / 123456': 'Or admin account: 0552515874 / 123456',
+    'أو حساب المدير: 0530569197 / 123456': 'Or admin account: 0530569197 / 123456',
 
     # WhatsApp OTP / GREEN API
     'أنشئ حسابك بالبيانات ثم أكّد الرقم برمز واتساب (إن كان GREEN API مفعّلًا).':

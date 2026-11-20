@@ -4,7 +4,7 @@
 <div class="stc-wrap" dir="ltr">
   <div class="stc-stage" id="stcStage">
     <main class="stc-card{% if mode != 'register' %} login{% endif %}" id="stcCard" aria-labelledby="login-title">
-      <form method="post" id="authForm" novalidate dir="rtl">
+      <form method="post" id="authForm" novalidate dir="{{ text_dir }}">
         <div class="stc-box f-reg">
           <h1 id="regTitle">{{ _('إنشاء حساب') }}</h1>
           <div id="regAlert"></div>
@@ -115,7 +115,7 @@
   <p class="stc-rot">{{ _('أدِر الهاتف لعرض أوضح') }}</p>
 </div>
 <div class="otp-modal" id="otpModal" hidden>
-  <div class="otp-modal-card" role="dialog" aria-modal="true" aria-labelledby="waTitle" dir="rtl">
+  <div class="otp-modal-card" role="dialog" aria-modal="true" aria-labelledby="waTitle" dir="{{ text_dir }}">
     <button type="button" class="otp-close" id="otpClose" aria-label="{{ _('إغلاق') }}">×</button>
     <div class="wa-otp-card" id="waOtpCard">
       <h1 id="waTitle">{{ _('تحقق واتساب') }}</h1>
@@ -152,8 +152,8 @@
   const dialBadge = document.getElementById('dialBadge');
   let mode = {{ mode|tojson }};
   if (mode !== 'login' && mode !== 'register' && mode !== 'reset') mode = 'login';
-  let waAvailable = false;
-  let waReason = '';
+  let waAvailable = {{ wa_available|tojson }};
+  let waReason = {{ (wa_reason or '')|tojson }};
   const savedCountry = {{ selected_country|tojson }};
 
   const form = document.getElementById('authForm');
@@ -462,19 +462,18 @@
     .then((r) => r.json())
     .then((s) => {
       waAvailable = !!s.available;
-      waReason = s.reason || T('تحقق واتساب غير مفعّل حتى يضبط المدير GREEN API.');
-      sync(false);
+      waReason = waAvailable
+        ? ''
+        : (s.reason || T('تحقق واتساب غير مفعّل حتى يضبط المدير GREEN API.'));
+      sync();
       if (s.countries) fillCountries(s.countries, s.default_country || 'SA');
-      if (!waAvailable) {
-        if (!s.countries) {
-          fetch('/api/auth/countries').then((r) => r.json()).then((d) => {
-            fillCountries(d.countries || [], d.default_country || 'SA');
-          }).catch(() => {});
-        }
+      if (!waAvailable && !s.countries) {
+        fetch('/api/auth/countries').then((r) => r.json()).then((d) => {
+          fillCountries(d.countries || [], d.default_country || 'SA');
+        }).catch(() => {});
       }
     })
     .catch(() => {
-      waCard.hidden = true;
       fetch('/api/auth/countries').then((r) => r.json()).then((d) => {
         fillCountries(d.countries || [], d.default_country || 'SA');
       }).catch(() => {});

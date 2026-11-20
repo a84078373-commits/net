@@ -142,7 +142,7 @@ class AppLocalizations {
   String get measurementAccountSignedIn =>
       _t('أنت متصل بحساب القياس', 'Signed in to your measurement account');
   String get adminLoginHintPhone =>
-      _t('سجّل دخول المدير: 0552515874', 'Admin sign-in: 0552515874');
+      _t('سجّل دخول المدير: 0530569197', 'Admin sign-in: 0530569197');
 
   // ── More / account ───────────────────────────────────────────
   String get eyebrowSmartcareHail =>
@@ -791,8 +791,8 @@ class AppLocalizations {
   String get adminAccessRequiredTitle =>
       _t('دخول المدير مطلوب', 'Admin access required');
   String get adminAccessRequiredBody => _t(
-    'سجّل الدخول برقم 0552515874 وكلمة المرور الخاصة بالمدير لفتح اللوحة الكاملة.',
-    'Sign in with 0552515874 and the admin password to open the full panel.',
+    'سجّل الدخول برقم 0530569197 وكلمة المرور الخاصة بالمدير لفتح اللوحة الكاملة.',
+    'Sign in with 0530569197 and the admin password to open the full panel.',
   );
   String get adminSignIn => _t('تسجيل دخول المدير', 'Admin sign-in');
   String get tabOverview => _t('نظرة عامة', 'Overview');
@@ -867,7 +867,7 @@ class AppLocalizations {
   );
   String get loginDetails => _t('بيانات الدخول', 'Sign-in details');
   String get adminPhoneLine =>
-      _t('رقم المدير: 0552515874', 'Admin phone: 0552515874');
+      _t('رقم المدير: 0530569197', 'Admin phone: 0530569197');
   String get geminiKeyPersistNote => _t(
     'بعد الحفظ لا تحتاج إعادة إدخال المفتاح إلا إذا أردت تغييره.',
     'After saving you do not need to re-enter the key unless you want to change it.',

@@ -20,7 +20,7 @@ services:
       - key: SMARTCARE_DB
         value: /var/data/smartcare.sqlite3
       - key: SMARTCARE_ADMIN_PHONE
-        value: "0552515874"
+        value: "0530569197"
       - key: SMARTCARE_ADMIN_PASSWORD
         value: "123456"
       # Generated once; do not rotate on each deploy (would invalidate web cookies).

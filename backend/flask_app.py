@@ -89,7 +89,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     cfg = settings or load_settings()
     database = Database(cfg.db)
     database.seed_admin(
-        phone=os.getenv('SMARTCARE_ADMIN_PHONE', '0552515874'),
+        phone=os.getenv('SMARTCARE_ADMIN_PHONE', '0530569197'),
         password=os.getenv('SMARTCARE_ADMIN_PASSWORD', '123456'),
         name=os.getenv('SMARTCARE_ADMIN_NAME', 'مدير النظام'),
     )
@@ -2879,12 +2879,22 @@ def create_app(settings: Settings | None = None) -> Flask:
                 return redirect(safe_next(request.args.get('next'), url_for('home')))
             except _ApiError as exc:
                 error = exc.message()
+        wa_cfg = whatsapp_otp_config()
+        wa_on = bool(wa_cfg.get('enabled'))
         return render_template(
             'login.html',
             error=error,
             mode=mode,
             countries=countries,
             selected_country=selected_country,
+            wa_available=wa_on,
+            wa_reason=(
+                None
+                if wa_on
+                else tr(
+                    'لم يُضبط GREEN API بعد؛ احفظ المعرّف والتوكن من لوحة الإدارة أو .env'
+                )
+            ),
             bare_layout=True,
             auth_layout=True,
         )

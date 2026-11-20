@@ -172,15 +172,33 @@ class Database:
             with suppress(OSError):
                 os.chmod(path, 0o600)
 
-    def seed_admin(self, phone='0552515874', password='123456', name='مدير النظام'):
+    def seed_admin(self, phone='0530569197', password='123456', name='مدير النظام'):
         """Create admin once. Never wipe users/password on restart unless reset flag is set."""
         salt = secrets.token_hex(16)
         digest = hashlib.pbkdf2_hmac(
             'sha256', password.encode(), bytes.fromhex(salt), 600000
         ).hex()
         reset = os.getenv('SMARTCARE_ADMIN_RESET_PASSWORD') == '1'
+        # Previous default admin phones — migrate/replace when the configured phone changes.
+        superseded = ('0552515874',)
         with self.connect() as db:
             row = db.execute('SELECT id FROM users WHERE phone=?', (phone,)).fetchone()
+            if not row:
+                for old in superseded:
+                    if old == phone:
+                        continue
+                    old_row = db.execute(
+                        'SELECT id FROM users WHERE phone=?', (old,)
+                    ).fetchone()
+                    if old_row:
+                        db.execute(
+                            'UPDATE users SET phone=?, name=?, salt=?, password_hash=?, hash_iterations=600000, is_admin=1 WHERE phone=?',
+                            (phone, name, salt, digest, old),
+                        )
+                        row = db.execute(
+                            'SELECT id FROM users WHERE phone=?', (phone,)
+                        ).fetchone()
+                        break
             if row:
                 if reset:
                     db.execute(
@@ -205,6 +223,9 @@ class Database:
                         time.time(),
                     ),
                 )
+            for old in superseded:
+                if old != phone:
+                    db.execute('DELETE FROM users WHERE phone=?', (old,))
             # Seed default Gemini key only when none is stored (never overwrite admin changes).
             row = db.execute(
                 "SELECT value FROM app_settings WHERE key='gemini_api_key'"
